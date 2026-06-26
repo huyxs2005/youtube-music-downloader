@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # YouTube Music Downloader
 
 Download a YouTube Music playlist to ordered `.opus` files.
@@ -95,3 +96,6 @@ the playlist id, stable YouTube `videoId`, optional `setVideoId`, title,
 artists, playlist index, and output filename. On later runs, the script uses
 the manifest to skip already downloaded songs and rename files when playlist
 order or metadata changes.
+=======
+"# youtube-music-downloader" 
+>>>>>>> 3c323bb7c19426de30f980f5375f6fd4640504af
