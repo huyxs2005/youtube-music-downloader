@@ -12,7 +12,6 @@ import traceback
 import subprocess
 import time
 import urllib.request
-from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -186,7 +185,7 @@ def download_track(track: Track, output_dir: Path, options: DownloadOptions) -> 
             old_temp.unlink()
 
     try:
-                return run_yt_dlp_download(
+        return run_yt_dlp_download(
             track,
             output_dir,
             options,
@@ -585,13 +584,27 @@ def main(argv: list[str] | None = None) -> int:
 
     ensure_po_provider_running()
 
-    return sync_playlist(
-        args.playlist_url,
-        Path(args.output),
-        options,
-        stop_after_video_id=args.stop_after_video_id,
-        max_workers=args.workers,
-    )
+    while True:
+        result = sync_playlist(
+            args.playlist_url,
+            Path(args.output),
+            options,
+            stop_after_video_id=args.stop_after_video_id,
+            max_workers=args.workers,
+        )
+
+        if result == 0:
+            return 0
+
+        print("")
+        answer = input("Some songs failed. Try again? [y/N]: ").strip().lower()
+
+        if answer not in {"y", "yes"}:
+            return result
+
+        print("")
+        print("Trying again...")
+        print("")
 
 
 if __name__ == "__main__":
