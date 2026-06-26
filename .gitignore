@@ -1,0 +1,7 @@
+__pycache__/
+*.py[cod]
+test_download_*/
+format_bug_test/
+downloads/
+download_errors.log
+cookies.txt
