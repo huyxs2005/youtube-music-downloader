@@ -129,7 +129,7 @@ def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
     )
 
 
-def fetch_playlist_tracks(playlist_url: str) -> tuple[str, int, list[Track], list[int]]:
+def fetch_playlist_tracks(playlist_url: str) -> tuple[str, str, int, list[Track], list[int]]:
     """Fetch ordered tracks with ytmusicapi, not yt-dlp playlist parsing.
 
     Number only valid/downloadable tracks, so skipped playlist items do not
@@ -137,6 +137,8 @@ def fetch_playlist_tracks(playlist_url: str) -> tuple[str, int, list[Track], lis
     """
     playlist_id = parse_playlist_id(playlist_url)
     playlist = YTMusic().get_playlist(playlist_id, limit=None)
+
+    playlist_title = str(playlist.get("title") or playlist_id).strip()
     playlist_items = playlist.get("tracks", [])
 
     tracks: list[Track] = []
@@ -153,7 +155,7 @@ def fetch_playlist_tracks(playlist_url: str) -> tuple[str, int, list[Track], lis
         else:
             skipped_items.append(original_index)
 
-    return playlist_id, len(playlist_items), tracks, skipped_items
+    return playlist_id, playlist_title, len(playlist_items), tracks, skipped_items
 
 
 def manifest_by_video_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -304,15 +306,21 @@ def manifest_entry(track: Track) -> dict[str, Any]:
 
 def sync_playlist(
     playlist_url: str,
-    output_dir: Path,
+    output_dir: Path | None,
     options: DownloadOptions,
     stop_after_video_id: str | None = None,
     max_workers: int = 10,
 ) -> int:
+    playlist_id, playlist_title, total_items, tracks, skipped_items = fetch_playlist_tracks(playlist_url)
+
+    if output_dir is None:
+        safe_playlist_title = sanitize_filename_part(playlist_title, "downloads")
+        output_dir = Path(__file__).resolve().parent / safe_playlist_title
+
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / MANIFEST_NAME
 
-    playlist_id, total_items, tracks, skipped_items = fetch_playlist_tracks(playlist_url)
+    print(f"Playlist: {playlist_title}")
     print(f"Total playlist items found: {total_items}")
     print(f"Total tracks found: {len(tracks)}")
     for item_index in skipped_items:
@@ -441,23 +449,26 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
 
 def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
     """Prompt for required values when the script is launched by double-click."""
-    launched_without_required_inputs = not args.playlist_url or not args.output
+    launched_without_required_inputs = not args.playlist_url
+
     if not launched_without_required_inputs:
         return args
 
     print("YouTube Music Playlist Downloader")
     print("")
+
     if not args.playlist_url:
         args.playlist_url = input("Paste the YouTube Music playlist URL: ").strip().strip('"')
+
     if not args.output:
-        default_output = str(Path.cwd() / "downloads")
-        output = input(f"Output folder [{default_output}]: ").strip().strip('"')
-        args.output = output or default_output
+        print("Output folder: automatic, using playlist name")
+
     if not args.cookies:
         print("")
         print("If YouTube shows a bot/sign-in error, export cookies with")
         print("'Get cookies.txt LOCALLY' and put the file here:")
         print(Path(__file__).resolve().with_name(DEFAULT_COOKIES_NAME))
+
     print("")
     return args
 
@@ -587,7 +598,7 @@ def main(argv: list[str] | None = None) -> int:
     while True:
         result = sync_playlist(
             args.playlist_url,
-            Path(args.output),
+            Path(args.output) if args.output else None,
             options,
             stop_after_video_id=args.stop_after_video_id,
             max_workers=args.workers,
