@@ -9,6 +9,10 @@ import re
 import shutil
 import sys
 import traceback
+import subprocess
+import time
+import urllib.request
+from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
@@ -127,18 +131,29 @@ def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
 
 
 def fetch_playlist_tracks(playlist_url: str) -> tuple[str, int, list[Track], list[int]]:
-    """Fetch ordered tracks with ytmusicapi, not yt-dlp playlist parsing."""
+    """Fetch ordered tracks with ytmusicapi, not yt-dlp playlist parsing.
+
+    Number only valid/downloadable tracks, so skipped playlist items do not
+    create gaps like 023, 025.
+    """
     playlist_id = parse_playlist_id(playlist_url)
     playlist = YTMusic().get_playlist(playlist_id, limit=None)
     playlist_items = playlist.get("tracks", [])
+
     tracks: list[Track] = []
     skipped_items: list[int] = []
-    for index, raw_track in enumerate(playlist_items, start=1):
-        track = track_from_ytmusic(raw_track, index)
+
+    track_number = 1
+
+    for original_index, raw_track in enumerate(playlist_items, start=1):
+        track = track_from_ytmusic(raw_track, track_number)
+
         if track:
             tracks.append(track)
+            track_number += 1
         else:
-            skipped_items.append(index)
+            skipped_items.append(original_index)
+
     return playlist_id, len(playlist_items), tracks, skipped_items
 
 
@@ -171,7 +186,13 @@ def download_track(track: Track, output_dir: Path, options: DownloadOptions) -> 
             old_temp.unlink()
 
     try:
-        return run_yt_dlp_download(track, output_dir, options, temp_stem, "bestaudio/best")
+                return run_yt_dlp_download(
+            track,
+            output_dir,
+            options,
+            temp_stem,
+            "bestaudio[ext=webm]/bestaudio/best",
+        )
     except DownloadError as exc:
         if "Requested format is not available" not in str(exc):
             raise
@@ -179,7 +200,7 @@ def download_track(track: Track, output_dir: Path, options: DownloadOptions) -> 
         for old_temp in output_dir.glob(f"{temp_stem.name}*"):
             if old_temp.is_file():
                 old_temp.unlink()
-        return run_yt_dlp_download(track, output_dir, options, temp_stem, "best")
+            return run_yt_dlp_download(track, output_dir, options, temp_stem, "bestaudio/best")
 
 
 def run_yt_dlp_download(
@@ -197,6 +218,11 @@ def run_yt_dlp_download(
         "no_warnings": True,
         "noprogress": True,
         "remote_components": ["ejs:github"],
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["web_music", "web_safari"],
+            }
+        },
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -436,6 +462,114 @@ def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
     print("")
     return args
 
+def ensure_docker_desktop_running() -> bool:
+    """Open Docker Desktop if Docker engine is not available yet."""
+    docker_desktop_paths = [
+        Path(r"C:\Program Files\Docker\Docker\Docker Desktop.exe"),
+        Path(r"C:\Users\Huy\AppData\Local\Docker\Docker Desktop.exe"),
+    ]
+
+    def docker_engine_ready() -> bool:
+        result = subprocess.run(
+            ["docker", "info"],
+            capture_output=True,
+            text=True,
+        )
+        return result.returncode == 0
+
+    if docker_engine_ready():
+        return True
+
+    print("Docker engine is not ready. Trying to start Docker Desktop...")
+
+    docker_desktop = next((path for path in docker_desktop_paths if path.exists()), None)
+
+    if not docker_desktop:
+        print("Could not find Docker Desktop.exe.")
+        print("Please open Docker Desktop manually.")
+        return False
+
+    subprocess.Popen(
+        [str(docker_desktop)],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+
+    print("Waiting for Docker Desktop to start...")
+
+    for _ in range(60):
+        if docker_engine_ready():
+            print("Docker Desktop is running.")
+            return True
+        time.sleep(2)
+
+    print("Docker Desktop did not become ready in time.")
+    print("Please open Docker Desktop manually.")
+    return False
+
+def ensure_po_provider_running() -> None:
+    """Start the bgutil PO-token provider Docker container if available."""
+    if not ensure_docker_desktop_running():
+        print("Continuing without PO-token provider. Downloads may hit HTTP 403.")
+        return
+
+    container_name = "bgutil-provider"
+    image_name = "brainicism/bgutil-ytdlp-pot-provider"
+    ping_url = "http://127.0.0.1:4416/ping"
+
+    def provider_is_alive() -> bool:
+        try:
+            with urllib.request.urlopen(ping_url, timeout=3) as response:
+                return 200 <= response.status < 500
+        except Exception:
+            return False
+
+    if provider_is_alive():
+        print("PO-token provider is already running.")
+        return
+
+    print("Starting PO-token provider Docker container...")
+
+    # Try starting existing container first.
+    start_result = subprocess.run(
+        ["docker", "start", container_name],
+        capture_output=True,
+        text=True,
+    )
+
+    # If container does not exist, create it.
+    if start_result.returncode != 0:
+        print("PO-token container not found. Creating it...")
+        run_result = subprocess.run(
+            [
+                "docker",
+                "run",
+                "-d",
+                "--name",
+                container_name,
+                "-p",
+                "4416:4416",
+                image_name,
+            ],
+            capture_output=True,
+            text=True,
+        )
+
+        if run_result.returncode != 0:
+            print("Could not start PO-token provider.")
+            print(run_result.stderr.strip())
+            print("Continuing anyway, but downloads may hit HTTP 403.")
+            return
+
+    # Wait a bit for the server to become ready.
+    for _ in range(10):
+        if provider_is_alive():
+            print("PO-token provider is running.")
+            return
+        time.sleep(1)
+
+    print("PO-token provider did not respond on http://127.0.0.1:4416/ping")
+    print("Continuing anyway, but downloads may hit HTTP 403.")
 
 def main(argv: list[str] | None = None) -> int:
     # Some Windows consoles cannot encode every title/artist in large playlists.
@@ -444,9 +578,13 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(errors="replace")
+
     args = ask_for_missing_inputs(parse_args(argv or sys.argv[1:]))
     check_ffmpeg()
     options = prepare_download_options(args)
+
+    ensure_po_provider_running()
+
     return sync_playlist(
         args.playlist_url,
         Path(args.output),
