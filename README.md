@@ -2,6 +2,8 @@
 
 Download a YouTube Music playlist into ordered `.opus` audio files.
 
+WARNING: USE A THROWAWAY EMAIL IF YOU DECIDE TO USE THE cookie.txt SINCE YOU CAN GET A BAN FROM YOUTUBE, I WON'T HOLD RESONSIBLE 
+
 This project uses:
 
 * `ytmusicapi` to read the playlist order from YouTube Music
