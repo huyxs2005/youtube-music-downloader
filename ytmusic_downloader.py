@@ -71,6 +71,29 @@ def parse_playlist_id(playlist_url: str) -> str:
     return playlist_id
 
 
+def validate_playlist_url(playlist_url: str) -> str:
+    playlist_url = playlist_url.strip().strip('"')
+    if not playlist_url:
+        raise ValueError("Playlist URL is required.")
+
+    parsed = urlparse(playlist_url)
+    if parsed.scheme not in {"http", "https"}:
+        raise ValueError("Playlist URL must start with http:// or https://.")
+
+    host = parsed.netloc.lower()
+    valid_hosts = {
+        "music.youtube.com",
+        "www.youtube.com",
+        "youtube.com",
+        "m.youtube.com",
+    }
+    if host not in valid_hosts:
+        raise ValueError("Expected a YouTube or YouTube Music playlist URL.")
+
+    parse_playlist_id(playlist_url)
+    return playlist_url
+
+
 def sanitize_filename_part(value: str, fallback: str) -> str:
     """Make one filename segment safe on Windows while keeping it readable."""
     value = value.strip() or fallback
@@ -651,13 +674,22 @@ def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
     launched_without_required_inputs = not args.playlist_url
 
     if not launched_without_required_inputs:
+        try:
+            args.playlist_url = validate_playlist_url(args.playlist_url)
+        except ValueError as exc:
+            raise SystemExit(f"Invalid playlist URL: {exc}") from exc
         return args
 
     print("YouTube Music Playlist Downloader")
     print("")
 
     if not args.playlist_url:
-        args.playlist_url = input("Paste the YouTube Music playlist URL: ").strip().strip('"')
+        while True:
+            try:
+                args.playlist_url = validate_playlist_url(input("Paste the YouTube Music playlist URL: "))
+                break
+            except ValueError as exc:
+                print(f"Invalid playlist URL: {exc}")
 
     if not args.output:
         print("Output folder: automatic, using playlist name")
@@ -780,6 +812,30 @@ def ensure_po_provider_running() -> None:
     print("PO-token provider did not respond on http://127.0.0.1:4416/ping")
     print("Continuing anyway, but downloads may hit HTTP 403.")
 
+
+def ask_yes_no(prompt: str, default: bool = False) -> bool:
+    suffix = " [Y/n]: " if default else " [y/N]: "
+    answer = input(prompt + suffix).strip().lower()
+    if not answer:
+        return default
+    return answer in {"y", "yes"}
+
+
+def ask_for_next_playlist(args: argparse.Namespace) -> argparse.Namespace:
+    while True:
+        try:
+            args.playlist_url = validate_playlist_url(input("Paste the next YouTube Music playlist URL: "))
+            break
+        except ValueError as exc:
+            print(f"Invalid playlist URL: {exc}")
+
+    output = input("Output folder for next playlist (press Enter for automatic): ").strip().strip('"')
+    args.output = output or None
+
+    print("")
+    return args
+
+
 def main(argv: list[str] | None = None) -> int:
     # Some Windows consoles cannot encode every title/artist in large playlists.
     # Replacing unsupported characters keeps progress printing from crashing.
@@ -795,26 +851,32 @@ def main(argv: list[str] | None = None) -> int:
     ensure_po_provider_running()
 
     while True:
-        result = sync_playlist(
-            args.playlist_url,
-            Path(args.output) if args.output else None,
-            options,
-            stop_after_video_id=args.stop_after_video_id,
-            max_workers=args.workers,
-        )
+        while True:
+            result = sync_playlist(
+                args.playlist_url,
+                Path(args.output) if args.output else None,
+                options,
+                stop_after_video_id=args.stop_after_video_id,
+                max_workers=args.workers,
+            )
 
-        if result == 0:
-            return 0
+            if result == 0:
+                break
+
+            print("")
+            if not ask_yes_no("Some songs failed. Try again?"):
+                break
+
+            print("")
+            print("Trying again...")
+            print("")
 
         print("")
-        answer = input("Some songs failed. Try again? [y/N]: ").strip().lower()
-
-        if answer not in {"y", "yes"}:
+        if not ask_yes_no("Download another playlist?"):
             return result
 
         print("")
-        print("Trying again...")
-        print("")
+        args = ask_for_next_playlist(args)
 
 
 if __name__ == "__main__":
