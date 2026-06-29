@@ -9,6 +9,7 @@ This project uses:
 * `ytmusicapi` to read the playlist order from YouTube Music
 * `yt-dlp` to download each song
 * `ffmpeg` to convert/extract audio to `.opus`
+* `mutagen` to embed artist/title tags and cover thumbnails into `.opus`
 * optional browser cookies for login/bot-check issues
 * optional BgUtils PO-token provider through Docker for YouTube 403 errors
 
@@ -27,9 +28,11 @@ It also keeps a `playlist_manifest.json` file so already-downloaded songs can be
 ## Features
 
 * Downloads YouTube Music playlists as `.opus`
+* Embeds title, artist, album, track number, and cover thumbnail metadata
 * Keeps playlist order in filenames
 * Skips songs that were already downloaded
 * Renames existing files if playlist order or metadata changes
+* Writes `failed_downloads.txt` in the music folder when any tracks fail
 * Avoids numbering gaps when unavailable playlist items have no `videoId`
 * Supports cookies with `cookies.txt`
 * Supports PO-token provider through Docker for HTTP 403 issues
@@ -56,7 +59,7 @@ Install these first:
 4. Python packages
 
    ```powershell
-   python -m pip install -U ytmusicapi yt-dlp bgutil-ytdlp-pot-provider
+   python -m pip install -U ytmusicapi yt-dlp mutagen bgutil-ytdlp-pot-provider
    ```
 
 Check that Python and FFmpeg work:
@@ -137,7 +140,22 @@ Change how many songs download at the same time:
 python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist" --workers 5
 ```
 
-Default worker count is `10`.
+By default, worker count is automatic:
+
+```text
+10 songs or fewer: 4 workers
+11-99 songs:       3 workers
+100+ songs:        2 workers
+```
+
+Downloads are also paced with yt-dlp request/download sleeps and limited retries to reduce 403/429 failures:
+
+```text
+sleep requests:    5 seconds
+sleep interval:    10-30 seconds before each download
+retries:           3
+fragment retries:  3
+```
 
 ---
 

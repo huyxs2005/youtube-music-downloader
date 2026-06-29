@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import re
 import shutil
+import struct
 import sys
 import traceback
 import subprocess
@@ -25,6 +27,13 @@ from yt_dlp.utils import DownloadError
 
 MANIFEST_NAME = "playlist_manifest.json"
 DEFAULT_COOKIES_NAME = "cookies.txt"
+FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
+YT_DLP_SLEEP_REQUESTS_SECONDS = 5
+YT_DLP_SLEEP_INTERVAL_SECONDS = 10
+YT_DLP_MAX_SLEEP_INTERVAL_SECONDS = 30
+YT_DLP_RETRIES = 3
+YT_DLP_FRAGMENT_RETRIES = 3
+EMBEDDED_THUMBNAIL_SIZE = 1008
 INVALID_WINDOWS_CHARS = r'<>:"/\|?*'
 RESERVED_WINDOWS_NAMES = {
     "CON",
@@ -43,6 +52,8 @@ class Track:
     set_video_id: str | None
     title: str
     artists: list[str]
+    album: str | None
+    thumbnail_url: str | None
     filename: str
 
 
@@ -102,6 +113,21 @@ def artists_to_text(artists: list[str]) -> str:
     return ", ".join(artist for artist in artists if artist) or "Unknown Artist"
 
 
+def best_thumbnail_url(thumbnails: list[dict[str, Any]]) -> str | None:
+    valid_thumbnails = [
+        item
+        for item in thumbnails
+        if isinstance(item, dict) and item.get("url")
+    ]
+    if not valid_thumbnails:
+        return None
+    best = max(
+        valid_thumbnails,
+        key=lambda item: int(item.get("width") or 0) * int(item.get("height") or 0),
+    )
+    return str(best["url"])
+
+
 def build_filename(index: int, artists: list[str], title: str) -> str:
     artist_text = sanitize_filename_part(artists_to_text(artists), "Unknown Artist")
     title_text = sanitize_filename_part(title, "Untitled")
@@ -119,12 +145,16 @@ def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
         if isinstance(item, dict) and item.get("name")
     ]
     title = str(raw_track.get("title") or "Untitled").strip()
+    album = raw_track.get("album")
+    album_name = str(album.get("name")).strip() if isinstance(album, dict) and album.get("name") else None
     return Track(
         index=index,
         video_id=video_id,
         set_video_id=raw_track.get("setVideoId"),
         title=title,
         artists=artists,
+        album=album_name,
+        thumbnail_url=best_thumbnail_url(raw_track.get("thumbnails", [])),
         filename=build_filename(index, artists, title),
     )
 
@@ -201,7 +231,7 @@ def download_track(track: Track, output_dir: Path, options: DownloadOptions) -> 
         for old_temp in output_dir.glob(f"{temp_stem.name}*"):
             if old_temp.is_file():
                 old_temp.unlink()
-            return run_yt_dlp_download(track, output_dir, options, temp_stem, "bestaudio/best")
+        return run_yt_dlp_download(track, output_dir, options, temp_stem, "bestaudio/best")
 
 
 def run_yt_dlp_download(
@@ -218,6 +248,11 @@ def run_yt_dlp_download(
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
+        "sleep_interval_requests": YT_DLP_SLEEP_REQUESTS_SECONDS,
+        "sleep_interval": YT_DLP_SLEEP_INTERVAL_SECONDS,
+        "max_sleep_interval": YT_DLP_MAX_SLEEP_INTERVAL_SECONDS,
+        "retries": YT_DLP_RETRIES,
+        "fragment_retries": YT_DLP_FRAGMENT_RETRIES,
         "remote_components": ["ejs:github"],
         "extractor_args": {
             "youtube": {
@@ -265,6 +300,14 @@ def download_track_job(
         return track, None, exc
 
 
+def automatic_worker_count(track_count: int) -> int:
+    if track_count <= 10:
+        return 4
+    if track_count >= 100:
+        return 2
+    return 3
+
+
 def ensure_final_path(temp_path: Path, final_path: Path) -> None:
     if final_path.exists():
         backup_path = final_path.with_name(f"{final_path.stem}.replaced{final_path.suffix}")
@@ -293,12 +336,135 @@ def rename_existing_file(current_path: Path, final_path: Path) -> bool:
     return True
 
 
+def flac_picture_block(image_bytes: bytes, mime_type: str, width: int = 0, height: int = 0) -> str:
+    """Build a base64 FLAC picture block for Ogg Opus cover art metadata."""
+    mime_bytes = mime_type.encode("ascii", errors="ignore") or b"image/jpeg"
+    description = b""
+    block = b"".join(
+        [
+            struct.pack(">I", 3),  # Front cover
+            struct.pack(">I", len(mime_bytes)),
+            mime_bytes,
+            struct.pack(">I", len(description)),
+            description,
+            struct.pack(">I", width),
+            struct.pack(">I", height),
+            struct.pack(">I", 0),  # Color depth unknown
+            struct.pack(">I", 0),  # Indexed colors
+            struct.pack(">I", len(image_bytes)),
+            image_bytes,
+        ]
+    )
+    return base64.b64encode(block).decode("ascii")
+
+
+def thumbnail_url_candidates(thumbnail_url: str | None) -> list[str]:
+    if not thumbnail_url:
+        return []
+
+    candidates = []
+    for size in [EMBEDDED_THUMBNAIL_SIZE, 800, 544]:
+        larger_url = re.sub(r"=w\d+-h\d+([^?&]*)", rf"=w{size}-h{size}\1", thumbnail_url)
+        larger_url = re.sub(r"=s\d+([^?&]*)", rf"=s{size}\1", larger_url)
+        candidates.append(larger_url)
+    candidates.append(thumbnail_url)
+
+    unique_candidates = []
+    for candidate in candidates:
+        if candidate not in unique_candidates:
+            unique_candidates.append(candidate)
+    return unique_candidates
+
+
+def image_size(image_bytes: bytes) -> tuple[int, int]:
+    try:
+        from io import BytesIO
+        from PIL import Image
+
+        with Image.open(BytesIO(image_bytes)) as image:
+            return image.size
+    except Exception:
+        return 0, 0
+
+
+def download_thumbnail(thumbnail_url: str | None) -> tuple[bytes, str, int, int] | None:
+    if not thumbnail_url:
+        return None
+
+    last_error: Exception | None = None
+    for candidate_url in thumbnail_url_candidates(thumbnail_url):
+        request = urllib.request.Request(
+            candidate_url,
+            headers={"User-Agent": "Mozilla/5.0"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                mime_type = response.headers.get_content_type() or "image/jpeg"
+                if mime_type not in {"image/jpeg", "image/png", "image/webp"}:
+                    mime_type = "image/jpeg"
+                image_bytes = response.read()
+                width, height = image_size(image_bytes)
+                return image_bytes, mime_type, width, height
+        except Exception as exc:
+            last_error = exc
+            continue
+
+    if last_error:
+        print(f"Warning: could not download thumbnail for metadata ({last_error})")
+    return None
+
+
+def apply_track_metadata(path: Path, track: Track) -> bool:
+    """Write Android-friendly OPUS title, artist, album, track, and cover-art tags."""
+    if not path.exists():
+        return False
+
+    try:
+        from mutagen.oggopus import OggOpus
+    except ImportError:
+        print("Warning: mutagen is not installed, so OPUS metadata could not be written.")
+        print("  Install it with: python -m pip install -U mutagen")
+        return False
+
+    try:
+        audio = OggOpus(path)
+        artist_text = artists_to_text(track.artists)
+        audio["title"] = [track.title]
+        audio["artist"] = [artist_text]
+        audio["albumartist"] = [artist_text]
+        audio["tracknumber"] = [str(track.index)]
+        if track.album:
+            audio["album"] = [track.album]
+        else:
+            audio.pop("album", None)
+
+        thumbnail = download_thumbnail(track.thumbnail_url)
+        if thumbnail:
+            image_bytes, mime_type, width, height = thumbnail
+            audio["metadata_block_picture"] = [flac_picture_block(image_bytes, mime_type, width, height)]
+
+        audio.save()
+        return True
+    except Exception as exc:
+        print(f"Warning: could not write metadata for {path.name}")
+        print(f"  {exc}")
+        return False
+
+
+def failed_track_line(track: Track) -> str:
+    artist_text = artists_to_text(track.artists)
+    url = f"https://music.youtube.com/watch?v={track.video_id}"
+    return f"{track.index:03d}. {artist_text} - {track.title} ({url})"
+
+
 def manifest_entry(track: Track) -> dict[str, Any]:
     return {
         "videoId": track.video_id,
         "setVideoId": track.set_video_id,
         "title": track.title,
         "artists": track.artists,
+        "album": track.album,
+        "thumbnail_url": track.thumbnail_url,
         "playlist_index": track.index,
         "output_filename": track.filename,
     }
@@ -309,7 +475,7 @@ def sync_playlist(
     output_dir: Path | None,
     options: DownloadOptions,
     stop_after_video_id: str | None = None,
-    max_workers: int = 10,
+    max_workers: int | None = None,
 ) -> int:
     playlist_id, playlist_title, total_items, tracks, skipped_items = fetch_playlist_tracks(playlist_url)
 
@@ -323,6 +489,8 @@ def sync_playlist(
     print(f"Playlist: {playlist_title}")
     print(f"Total playlist items found: {total_items}")
     print(f"Total tracks found: {len(tracks)}")
+    selected_max_workers = max_workers if max_workers is not None else automatic_worker_count(len(tracks))
+    print(f"Worker mode: {'manual' if max_workers is not None else 'auto'} ({selected_max_workers} workers max)")
     for item_index in skipped_items:
         print(f"Skipping playlist item {item_index:03d}: no videoId found")
 
@@ -332,7 +500,9 @@ def sync_playlist(
     skipped_count = 0
     renamed_count = 0
     downloaded_count = 0
+    metadata_count = 0
     failed_count = 0
+    failed_tracks: list[Track] = []
     pending_downloads: list[Track] = []
 
     for track in tracks:
@@ -359,11 +529,15 @@ def sync_playlist(
                 pending_downloads.append(track)
 
             if track not in pending_downloads:
+                if apply_track_metadata(final_path, track):
+                    print(f"Updated metadata: {track.filename}")
+                    metadata_count += 1
                 known_tracks[track.video_id] = manifest_entry(track)
                 save_manifest(manifest_path, playlist_id, known_tracks)
                 success_count += 1
         except Exception as exc:  # Keep the playlist moving if one song fails.
             failed_count += 1
+            failed_tracks.append(track)
             print(f"Failed: {track.index:03d} - {track.title} ({track.video_id})")
             print(f"  {exc}")
             with (output_dir / "download_errors.log").open("a", encoding="utf-8") as log_file:
@@ -376,7 +550,7 @@ def sync_playlist(
             break
 
     if pending_downloads:
-        worker_count = max(1, min(max_workers, len(pending_downloads)))
+        worker_count = max(1, min(selected_max_workers, len(pending_downloads)))
         print("")
         print(f"Downloading {len(pending_downloads)} queued tracks with {worker_count} workers...")
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
@@ -389,6 +563,7 @@ def sync_playlist(
                 final_path = output_dir / track.filename
                 if exc:
                     failed_count += 1
+                    failed_tracks.append(track)
                     print(f"Failed: {track.index:03d} - {track.title} ({track.video_id})")
                     print(f"  {exc}")
                     with (output_dir / "download_errors.log").open("a", encoding="utf-8") as log_file:
@@ -399,10 +574,26 @@ def sync_playlist(
 
                 print(f"Downloaded: {track.filename}")
                 ensure_final_path(temp_output, final_path)
+                if apply_track_metadata(final_path, track):
+                    print(f"Updated metadata: {track.filename}")
+                    metadata_count += 1
                 known_tracks[track.video_id] = manifest_entry(track)
                 save_manifest(manifest_path, playlist_id, known_tracks)
                 downloaded_count += 1
                 success_count += 1
+
+    failed_downloads_path = output_dir / FAILED_DOWNLOADS_NAME
+    if failed_tracks:
+        with failed_downloads_path.open("w", encoding="utf-8") as file:
+            file.write(f"Failed downloads for {playlist_title}\n")
+            file.write(f"Playlist: {playlist_url}\n")
+            file.write(f"Count: {len(failed_tracks)}\n")
+            file.write("\n")
+            for failed_track in failed_tracks:
+                file.write(failed_track_line(failed_track))
+                file.write("\n")
+    elif failed_downloads_path.exists():
+        failed_downloads_path.unlink()
 
     print("")
     print("Final summary")
@@ -410,9 +601,12 @@ def sync_playlist(
     print(f"  Downloaded: {downloaded_count}")
     print(f"  Skipped: {skipped_count}")
     print(f"  Renamed: {renamed_count}")
+    print(f"  Metadata updated: {metadata_count}")
     print(f"  Failed: {failed_count}")
     print(f"  Output: {output_dir}")
     print(f"  Manifest: {manifest_path}")
+    if failed_tracks:
+        print(f"  Failed list: {failed_downloads_path}")
     return 0 if failed_count == 0 else 1
 
 
@@ -441,7 +635,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Download a YouTube Music playlist as ordered OPUS files.")
     parser.add_argument("playlist_url", nargs="?", help="YouTube Music playlist URL, for example https://music.youtube.com/playlist?list=...")
     parser.add_argument("--output", help="Output folder for OPUS files and playlist_manifest.json.")
-    parser.add_argument("--workers", type=int, default=10, help="Number of songs to download at the same time. Default: 10.")
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=None,
+        help="Override automatic worker count. Auto uses 4 workers for <=10 tracks, 3 for 11-99, and 2 for 100+.",
+    )
     parser.add_argument("--cookies", help="Path to a cookies.txt file exported from your browser.")
     parser.add_argument("--stop-after-video-id", help=argparse.SUPPRESS)
     return parser.parse_args(argv)
