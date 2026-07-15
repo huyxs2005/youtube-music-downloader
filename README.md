@@ -1,6 +1,7 @@
 # YouTube Music Downloader
 
-Download a YouTube Music playlist into ordered `.opus` audio files.
+Download a YouTube Music playlist into stable `.opus` audio files and a
+Poweramp-compatible `.m3u8` playlist.
 
 WARNING: USE A THROWAWAY EMAIL IF YOU DECIDE TO USE THE cookie.txt SINCE YOU CAN GET A BAN FROM YOUTUBE, I WON'T HOLD RESONSIBLE 
 
@@ -13,15 +14,17 @@ This project uses:
 * optional browser cookies for login/bot-check issues
 * optional BgUtils PO-token provider through Docker for YouTube 403 errors
 
-The downloader is designed to keep playlist order like this:
+New downloads use filenames that do not depend on playlist position:
 
 ```text
-001 - Artist - Title.opus
-002 - Artist - Title.opus
-003 - Artist - Title.opus
+Artist - Title [videoId].opus
 ```
 
-It also keeps a `playlist_manifest.json` file so already-downloaded songs can be skipped and renamed correctly if the playlist order changes.
+The current YouTube Music order is stored in a title-based `.m3u8` file. The
+`playlist_manifest.json` file permanently associates each YouTube `videoId`
+with its audio filename, so reordering a playlist does not rename, redownload,
+or modify existing audio. Existing numbered files such as
+`001 - Artist - Title.opus` remain unchanged after migration.
 
 ---
 
@@ -29,11 +32,12 @@ It also keeps a `playlist_manifest.json` file so already-downloaded songs can be
 
 * Downloads YouTube Music playlists as `.opus`
 * Embeds title, artist, album, track number, and cover thumbnail metadata
-* Keeps playlist order in filenames
+* Generates a UTF-8 Poweramp `.m3u8` in current YouTube Music order
 * Skips songs that were already downloaded
-* Renames existing files if playlist order or metadata changes
+* Keeps every existing manifest filename unchanged when playlist order changes
+* Uses stable, collision-resistant filenames containing `videoId` for new songs
 * Writes `failed_downloads.txt` in the music folder when any tracks fail
-* Avoids numbering gaps when unavailable playlist items have no `videoId`
+* Skips unavailable playlist items that have no `videoId`
 * Supports cookies with `cookies.txt`
 * Supports PO-token provider through Docker for HTTP 403 issues
 * Can be launched by double-clicking `Download Playlist.bat`
@@ -275,22 +279,27 @@ If that happens, make sure Docker Desktop is running and the `bgutil-provider` c
 
 ## Output Files
 
-Downloaded songs are saved as:
+Newly downloaded songs are saved as:
 
 ```text
-001 - Artist - Title.opus
-002 - Artist - Title.opus
-003 - Artist - Title.opus
+Artist - Title [videoId].opus
 ```
 
 The output folder also contains:
 
 ```text
+Playlist Title.m3u8
 playlist_manifest.json
 download_errors.log
 ```
 
-`playlist_manifest.json` stores downloaded track info so the script can skip already downloaded songs on later runs.
+`Playlist Title.m3u8` contains relative paths to the existing audio files in
+the current YouTube Music playlist order. Tracks with missing or failed audio
+are omitted until a later retry succeeds.
+
+`playlist_manifest.json` stores track information, the permanent filename for
+each `videoId`, the current playlist index, and the generated M3U8 filename.
+This lets the script skip already downloaded songs on later runs.
 
 `download_errors.log` appears if some tracks fail.
 
@@ -302,29 +311,51 @@ If you run the same playlist again:
 
 * already-downloaded songs are skipped
 * new songs are downloaded
-* old files are renamed if the playlist order changed
-* numbering is recalculated from valid downloadable tracks
+* existing audio filenames remain unchanged
+* the manifest playlist indexes are refreshed
+* the `.m3u8` is regenerated in the current playlist order
 
 Example:
 
-Old playlist:
+Existing files:
 
 ```text
-001 - Song A.opus
-002 - Song B.opus
-003 - Song C.opus
+001 - Artist - Song A.opus
+002 - Artist - Song B.opus
+Artist - Song C [c-video-id].opus
 ```
 
-New playlist with a song added at the top:
+If YouTube Music changes from A, B, C to C, A, B, those filenames stay exactly
+the same. Only the M3U8 order changes:
 
 ```text
-001 - Song D.opus
-002 - Song A.opus
-003 - Song B.opus
-004 - Song C.opus
+#EXTM3U
+#EXTINF:-1,Artist - Song C
+Artist - Song C [c-video-id].opus
+#EXTINF:-1,Artist - Song A
+001 - Artist - Song A.opus
+#EXTINF:-1,Artist - Song B
+002 - Artist - Song B.opus
 ```
 
-The script uses the manifest to rename and keep order.
+The script migrates existing downloaded folders from their manifests without
+redownloading or renaming audio.
+
+---
+
+## Using the Playlist in Poweramp
+
+After each sync, copy only the new `.opus` files and the updated `.m3u8` file
+to the same folder on your Android device. Existing `.opus` files do not need
+to be copied again just because the playlist order changed.
+
+In Poweramp, open **Library > Playlists** and select the playlist named after
+the generated M3U8. The M3U8 references exact audio filenames in the same
+folder and supplies the current YouTube Music order.
+
+The **Folder Songs** view can remain sorted by filename; that sorting does not
+control the order inside the playlist. Turn playback shuffle **off** when you
+want Poweramp to play the playlist sequentially from top to bottom.
 
 ---
 

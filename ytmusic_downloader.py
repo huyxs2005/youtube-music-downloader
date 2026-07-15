@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Download a YouTube Music playlist as ordered OPUS files."""
+"""Download a YouTube Music playlist as stable OPUS files with an M3U8."""
 
 from __future__ import annotations
 
@@ -119,12 +119,25 @@ def load_manifest(path: Path) -> dict[str, Any]:
     return data
 
 
-def save_manifest(path: Path, playlist_id: str, tracks_by_video_id: dict[str, dict[str, Any]]) -> None:
-    ordered_tracks = sorted(tracks_by_video_id.values(), key=lambda item: item["playlist_index"])
+def save_manifest(
+    path: Path,
+    playlist_id: str,
+    tracks_by_video_id: dict[str, dict[str, Any]],
+    playlist_title: str | None = None,
+    m3u8_filename: str | None = None,
+) -> None:
+    ordered_tracks = sorted(
+        tracks_by_video_id.values(),
+        key=lambda item: (item.get("playlist_index", sys.maxsize), str(item.get("videoId", ""))),
+    )
     data = {
         "playlist_id": playlist_id,
         "tracks": ordered_tracks,
     }
+    if playlist_title is not None:
+        data["playlist_title"] = playlist_title
+    if m3u8_filename is not None:
+        data["m3u8_filename"] = m3u8_filename
     temp_path = path.with_suffix(".json.tmp")
     with temp_path.open("w", encoding="utf-8") as file:
         json.dump(data, file, ensure_ascii=False, indent=2)
@@ -151,10 +164,25 @@ def best_thumbnail_url(thumbnails: list[dict[str, Any]]) -> str | None:
     return str(best["url"])
 
 
-def build_filename(index: int, artists: list[str], title: str) -> str:
+def build_filename(artists: list[str], title: str, video_id: str) -> str:
     artist_text = sanitize_filename_part(artists_to_text(artists), "Unknown Artist")
     title_text = sanitize_filename_part(title, "Untitled")
-    return f"{index:03d} - {artist_text} - {title_text}.opus"
+    video_id_text = sanitize_filename_part(video_id, "video")
+    return f"{artist_text} - {title_text} [{video_id_text}].opus"
+
+
+def build_m3u8_filename(playlist_title: str) -> str:
+    safe_title = sanitize_filename_part(playlist_title, "YouTube Music Playlist")
+    return f"{safe_title}.m3u8"
+
+
+def safe_manifest_filename(value: Any, suffix: str) -> str | None:
+    """Return a manifest filename only when it cannot escape the output folder."""
+    if not isinstance(value, str) or not value or "/" in value or "\\" in value:
+        return None
+    if value in {".", ".."} or not value.lower().endswith(suffix.lower()):
+        return None
+    return value
 
 
 def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
@@ -178,7 +206,7 @@ def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
         artists=artists,
         album=album_name,
         thumbnail_url=best_thumbnail_url(raw_track.get("thumbnails", [])),
-        filename=build_filename(index, artists, title),
+        filename=build_filename(artists, title, video_id),
     )
 
 
@@ -220,20 +248,13 @@ def manifest_by_video_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return result
 
 
-def path_is_same(a: Path, b: Path) -> bool:
-    try:
-        return a.resolve() == b.resolve()
-    except OSError:
-        return a.absolute() == b.absolute()
-
-
 def unique_temp_stem(output_dir: Path, video_id: str) -> Path:
     safe_video_id = sanitize_filename_part(video_id, "video")
     return output_dir / f".download-{safe_video_id}"
 
 
 def download_track(track: Track, output_dir: Path, options: DownloadOptions) -> Path:
-    """Download one videoId only, writing to a temp name before final rename."""
+    """Download one videoId only, writing to a temp name before the final move."""
     temp_stem = unique_temp_stem(output_dir, track.video_id)
     for old_temp in output_dir.glob(f"{temp_stem.name}*"):
         if old_temp.is_file():
@@ -340,23 +361,6 @@ def ensure_final_path(temp_path: Path, final_path: Path) -> None:
             counter += 1
         final_path.replace(backup_path)
     temp_path.replace(final_path)
-
-
-def rename_existing_file(current_path: Path, final_path: Path) -> bool:
-    """Rename a previously downloaded track when playlist order or metadata changes."""
-    if path_is_same(current_path, final_path):
-        return False
-    if not current_path.exists():
-        return False
-    if final_path.exists():
-        backup_path = final_path.with_name(f"{final_path.stem}.replaced{final_path.suffix}")
-        counter = 1
-        while backup_path.exists():
-            backup_path = final_path.with_name(f"{final_path.stem}.replaced-{counter}{final_path.suffix}")
-            counter += 1
-        final_path.replace(backup_path)
-    current_path.replace(final_path)
-    return True
 
 
 def flac_picture_block(image_bytes: bytes, mime_type: str, width: int = 0, height: int = 0) -> str:
@@ -493,6 +497,46 @@ def manifest_entry(track: Track) -> dict[str, Any]:
     }
 
 
+def write_poweramp_m3u8(
+    output_dir: Path,
+    playlist_title: str,
+    tracks: list[Track],
+    tracks_by_video_id: dict[str, dict[str, Any]],
+    previous_filename: Any = None,
+) -> tuple[Path, int]:
+    """Atomically write the current, existing-file-only Poweramp playlist."""
+    m3u8_filename = build_m3u8_filename(playlist_title)
+    m3u8_path = output_dir / m3u8_filename
+    lines = ["#EXTM3U"]
+    included_count = 0
+
+    for track in tracks:
+        entry = tracks_by_video_id.get(track.video_id, {})
+        output_filename = safe_manifest_filename(entry.get("output_filename"), ".opus")
+        if not output_filename or not (output_dir / output_filename).is_file():
+            continue
+
+        artist_title = f"{artists_to_text(track.artists)} - {track.title}"
+        artist_title = re.sub(r"[\r\n]+", " ", artist_title).strip()
+        lines.append(f"#EXTINF:-1,{artist_title}")
+        lines.append(output_filename)
+        included_count += 1
+
+    temp_path = m3u8_path.with_name(f"{m3u8_path.name}.tmp")
+    with temp_path.open("w", encoding="utf-8", newline="\n") as file:
+        file.write("\n".join(lines))
+        file.write("\n")
+    temp_path.replace(m3u8_path)
+
+    old_filename = safe_manifest_filename(previous_filename, ".m3u8")
+    if old_filename and old_filename != m3u8_filename:
+        old_path = output_dir / old_filename
+        if old_path.is_file():
+            old_path.unlink()
+
+    return m3u8_path, included_count
+
+
 def sync_playlist(
     playlist_url: str,
     output_dir: Path | None,
@@ -519,9 +563,9 @@ def sync_playlist(
 
     manifest = load_manifest(manifest_path)
     known_tracks = manifest_by_video_id(manifest)
+    previous_m3u8_filename = manifest.get("m3u8_filename")
     success_count = 0
     skipped_count = 0
-    renamed_count = 0
     downloaded_count = 0
     metadata_count = 0
     failed_count = 0
@@ -529,22 +573,28 @@ def sync_playlist(
     pending_downloads: list[Track] = []
 
     for track in tracks:
-        final_path = output_dir / track.filename
         old_entry = known_tracks.get(track.video_id)
-        old_filename = old_entry.get("output_filename") if old_entry else None
-        old_path = output_dir / old_filename if old_filename else None
+        old_filename = safe_manifest_filename(
+            old_entry.get("output_filename") if old_entry else None,
+            ".opus",
+        )
+        if old_filename:
+            # The manifest owns this name permanently. Playlist reordering and
+            # metadata changes must never rename an existing audio file.
+            track.filename = old_filename
+
+        final_path = output_dir / track.filename
+        known_tracks[track.video_id] = manifest_entry(track)
+        save_manifest(
+            manifest_path,
+            playlist_id,
+            known_tracks,
+            playlist_title,
+            previous_m3u8_filename,
+        )
 
         try:
-            if old_path and old_path.exists():
-                if rename_existing_file(old_path, final_path):
-                    print(f"Renaming: {old_filename} -> {track.filename}")
-                    renamed_count += 1
-                else:
-                    print(f"Skipping: {track.filename}")
-                    skipped_count += 1
-            elif old_entry and final_path.exists():
-                # The manifest says this videoId was downloaded, and the file is
-                # already at today's desired ordered filename.
+            if final_path.is_file():
                 print(f"Skipping: {track.filename}")
                 skipped_count += 1
             else:
@@ -552,11 +602,13 @@ def sync_playlist(
                 pending_downloads.append(track)
 
             if track not in pending_downloads:
-                if apply_track_metadata(final_path, track):
-                    print(f"Updated metadata: {track.filename}")
-                    metadata_count += 1
-                known_tracks[track.video_id] = manifest_entry(track)
-                save_manifest(manifest_path, playlist_id, known_tracks)
+                save_manifest(
+                    manifest_path,
+                    playlist_id,
+                    known_tracks,
+                    playlist_title,
+                    previous_m3u8_filename,
+                )
                 success_count += 1
         except Exception as exc:  # Keep the playlist moving if one song fails.
             failed_count += 1
@@ -601,7 +653,13 @@ def sync_playlist(
                     print(f"Updated metadata: {track.filename}")
                     metadata_count += 1
                 known_tracks[track.video_id] = manifest_entry(track)
-                save_manifest(manifest_path, playlist_id, known_tracks)
+                save_manifest(
+                    manifest_path,
+                    playlist_id,
+                    known_tracks,
+                    playlist_title,
+                    previous_m3u8_filename,
+                )
                 downloaded_count += 1
                 success_count += 1
 
@@ -618,16 +676,31 @@ def sync_playlist(
     elif failed_downloads_path.exists():
         failed_downloads_path.unlink()
 
+    m3u8_path, m3u8_track_count = write_poweramp_m3u8(
+        output_dir,
+        playlist_title,
+        tracks,
+        known_tracks,
+        previous_m3u8_filename,
+    )
+    save_manifest(
+        manifest_path,
+        playlist_id,
+        known_tracks,
+        playlist_title,
+        m3u8_path.name,
+    )
+
     print("")
     print("Final summary")
     print(f"  Successful tracks: {success_count}")
     print(f"  Downloaded: {downloaded_count}")
     print(f"  Skipped: {skipped_count}")
-    print(f"  Renamed: {renamed_count}")
     print(f"  Metadata updated: {metadata_count}")
     print(f"  Failed: {failed_count}")
     print(f"  Output: {output_dir}")
     print(f"  Manifest: {manifest_path}")
+    print(f"  M3U8: {m3u8_path} ({m3u8_track_count} tracks)")
     if failed_tracks:
         print(f"  Failed list: {failed_downloads_path}")
     return 0 if failed_count == 0 else 1
@@ -655,7 +728,7 @@ def prepare_download_options(args: argparse.Namespace) -> DownloadOptions:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download a YouTube Music playlist as ordered OPUS files.")
+    parser = argparse.ArgumentParser(description="Download a YouTube Music playlist as stable OPUS files with an M3U8.")
     parser.add_argument("playlist_url", nargs="?", help="YouTube Music playlist URL, for example https://music.youtube.com/playlist?list=...")
     parser.add_argument("--output", help="Output folder for OPUS files and playlist_manifest.json.")
     parser.add_argument(
