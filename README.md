@@ -3,7 +3,7 @@
 Download a YouTube Music playlist into stable `.opus` audio files and a
 Poweramp-compatible `.m3u8` playlist.
 
-WARNING: USE A THROWAWAY EMAIL IF YOU DECIDE TO USE THE cookie.txt SINCE YOU CAN GET A BAN FROM YOUTUBE, I WON'T HOLD RESONSIBLE
+WARNING: USE A THROWAWAY EMAIL IF YOU DECIDE TO USE THE cookie.txt SINCE YOU CAN GET A BAN FROM YOUTUBE, I WON'T HOLD RESPONSIBLE
 
 This project uses:
 
@@ -62,8 +62,8 @@ The installer provides:
 Docker login is not required. If WSL 2 is not enabled yet, Windows may require
 one restart; setup records its progress and resumes after sign-in.
 
-The free v1.0 installer is unsigned, so Windows may display an **Unknown
-publisher** or SmartScreen warning. Download it only from the official release,
+The free v1.0 installer is unsigned, so Windows may display an **Unknown**
+**publisher** or SmartScreen warning. Download it only from the official release,
 verify the published SHA-256 checksum, and then use **More info > Run anyway**.
 
 The installer never contains `cookies.txt`, and installing, updating, or
@@ -99,22 +99,6 @@ Check that Python and FFmpeg work:
 python --version
 ffmpeg -version
 ```
-
----
-
-## Project Files
-
-Keep these files in the same folder:
-
-```text
-Download Playlist.bat
-ytmusic_downloader.py
-cookies.txt
-```
-
-`cookies.txt` is optional, but recommended.
-
-Do not upload `cookies.txt` to GitHub. It contains private login cookies.
 
 ---
 
@@ -179,53 +163,6 @@ the same playlist folder on the phone, then let Poweramp rescan its library.
 
 ---
 
-## PowerShell Usage
-
-Run from the project folder:
-
-```powershell
-cd "D:\Youtube Music Downloader"
-
-python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist"
-```
-
-Add one song to the top of an existing downloaded playlist:
-
-```powershell
-python ytmusic_downloader.py "https://music.youtube.com/watch?v=VIDEO_ID" --output "D:\Music\My Playlist"
-```
-
-Use a specific cookies file:
-
-```powershell
-python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist" --cookies ".\cookies.txt"
-```
-
-Change how many songs download at the same time:
-
-```powershell
-python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist" --workers 5
-```
-
-By default, worker count is automatic:
-
-```text
-10 songs or fewer: 4 workers
-11-99 songs:       3 workers
-100+ songs:        2 workers
-```
-
-Downloads are also paced with yt-dlp request/download sleeps and limited retries to reduce 403/429 failures:
-
-```text
-sleep requests:    5 seconds
-sleep interval:    10-30 seconds before each download
-retries:           3
-fragment retries:  3
-```
-
----
-
 ## Cookies Setup
 
 If YouTube gives errors like:
@@ -236,28 +173,22 @@ Sign in to confirm you're not a bot
 
 or downloads fail because YouTube needs your logged-in session, export cookies from your browser.
 
-Recommended browser extension:
+Use this extension:
 
-```text
-Get cookies.txt LOCALLY
-```
+https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc?hl=en
 
-Export cookies from the browser where you are logged into YouTube Music.
+Steps:
 
-Save the file as:
+1. Install the extension in Chrome
+2. Log into YouTube Music
+3. Export cookies
+4. Save as:
 
 ```text
 cookies.txt
 ```
 
-Place it in the same folder as:
-
-```text
-ytmusic_downloader.py
-Download Playlist.bat
-```
-
-The script will automatically use it.
+Place it in the same folder as the downloader script.
 
 ---
 
@@ -297,19 +228,6 @@ Check that it works:
 Invoke-WebRequest http://127.0.0.1:4416/ping
 ```
 
-After this setup, the Python script can automatically:
-
-1. Open Docker Desktop if needed
-2. Wait for Docker engine to be ready
-3. Start the `bgutil-provider` container
-4. Download with PO-token support
-
-The normal downloader keeps optional Docker/PO-token provider diagnostics
-silent. If the provider is unavailable, it continues with the regular download
-flow without filling the CMD window with token errors.
-
-After restarting your PC, you should usually only need to run the `.bat` file again.
-
 ---
 
 ## Testing PO Token Support
@@ -317,8 +235,6 @@ After restarting your PC, you should usually only need to run the `.bat` file ag
 Run this test:
 
 ```powershell
-cd "D:\Youtube Music Downloader"
-
 python -m yt_dlp -v --cookies ".\cookies.txt" --yes-playlist --playlist-items 1 -f "bestaudio[ext=webm]/bestaudio/best" -x --audio-format opus "https://music.youtube.com/playlist?list=PLAYLIST_ID"
 ```
 
@@ -331,16 +247,12 @@ Retrieved a gvs PO Token
 Downloading 1 format(s): 251
 ```
 
-Format `251` is the good Opus audio-only format.
-
 Bad signs:
 
 ```text
 PO Token Providers: none
 HTTP Error 403: Forbidden
 ```
-
-If that happens, make sure Docker Desktop is running and the `bgutil-provider` container is started.
 
 ---
 
@@ -359,73 +271,6 @@ Playlist Title.m3u8
 playlist_manifest.json
 download_errors.log
 ```
-
-`Playlist Title.m3u8` contains relative paths to the existing audio files in
-the current YouTube Music playlist order. Tracks with missing or failed audio
-are omitted until a later retry succeeds.
-
-`playlist_manifest.json` stores track information, the permanent filename for
-each `videoId`, the current playlist index, and the generated M3U8 filename.
-This lets the script skip already downloaded songs on later runs.
-
-`download_errors.log` appears only when tracks fail. It contains one readable
-song entry per current failure, without Docker/token diagnostics or Python
-tracebacks. Each run replaces the old report, and a fully successful retry
-removes it automatically.
-
----
-
-## Redownloading the Same Playlist
-
-If you run the same playlist again:
-
-* already-downloaded songs are skipped
-* new songs are downloaded
-* existing audio filenames remain unchanged
-* the manifest playlist indexes are refreshed
-* the `.m3u8` is regenerated in the current playlist order
-
-Example:
-
-Existing files:
-
-```text
-001 - Artist - Song A.opus
-002 - Artist - Song B.opus
-Artist - Song C [c-video-id].opus
-```
-
-If YouTube Music changes from A, B, C to C, A, B, those filenames stay exactly
-the same. Only the M3U8 order changes:
-
-```text
-#EXTM3U
-#EXTINF:-1,Artist - Song C
-Artist - Song C [c-video-id].opus
-#EXTINF:-1,Artist - Song A
-001 - Artist - Song A.opus
-#EXTINF:-1,Artist - Song B
-002 - Artist - Song B.opus
-```
-
-The script migrates existing downloaded folders from their manifests without
-redownloading or renaming audio.
-
----
-
-## Using the Playlist in Poweramp
-
-After each sync, copy only the new `.opus` files and the updated `.m3u8` file
-to the same folder on your Android device. Existing `.opus` files do not need
-to be copied again just because the playlist order changed.
-
-In Poweramp, open **Library > Playlists** and select the playlist named after
-the generated M3U8. The M3U8 references exact audio filenames in the same
-folder and supplies the current YouTube Music order.
-
-The **Folder Songs** view can remain sorted by filename; that sorting does not
-control the order inside the playlist. Turn playback shuffle **off** when you
-want Poweramp to play the playlist sequentially from top to bottom.
 
 ---
 
@@ -449,58 +294,19 @@ python -m pip install -U ytmusicapi yt-dlp bgutil-ytdlp-pot-provider
 
 ### `HTTP Error 403: Forbidden`
 
-Use the PO-token setup.
-
-Check Docker:
-
-```powershell
-docker ps
-Invoke-WebRequest http://127.0.0.1:4416/ping
-```
-
-Then rerun the downloader.
+Use the PO-token setup and ensure Docker is running.
 
 ### `cookies.txt does not look like a Netscape format cookies file`
 
-Re-export cookies using `Get cookies.txt LOCALLY`.
-
-The first line should look like:
-
-```text
-# Netscape HTTP Cookie File
-```
+Re-export cookies using the extension.
 
 ### Docker pull gives `EOF`
 
-This is usually a network issue.
+Retry the pull or adjust Docker DNS settings.
 
-Try again a few times:
+### Docker says `docker-credential-desktop` not found`
 
-```powershell
-docker pull brainicism/bgutil-ytdlp-pot-provider
-```
-
-If it keeps failing, open Docker Desktop settings and add this to Docker Engine config:
-
-```json
-{
-  "dns": ["8.8.8.8", "1.1.1.1"],
-  "max-concurrent-downloads": 1
-}
-```
-
-Then click **Apply & Restart**.
-
-### Docker says `docker-credential-desktop` not found
-
-Reset Docker config:
-
-```powershell
-Set-Content "$env:USERPROFILE\.docker\config.json" '{ "auths": {}, "currentContext": "desktop-linux" }'
-docker logout
-```
-
-Then try pulling again.
+Reset Docker config and retry.
 
 ---
 
