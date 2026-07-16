@@ -347,44 +347,6 @@ M3U8. The newest manually added song becomes first.
 After a sync finishes, answer **Yes** when asked whether to download another
 playlist or song. The URL prompt and folder picker open again.
 
-### PowerShell usage
-
-Download a playlist:
-
-```powershell
-python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist"
-```
-
-For command-line usage, `--output` is the exact playlist folder. The
-double-click flow is recommended when you want the program to create a
-playlist-title subfolder automatically beneath a selected parent location.
-
-Add one song to an existing playlist:
-
-```powershell
-python ytmusic_downloader.py "https://music.youtube.com/watch?v=VIDEO_ID" --output "D:\Music\My Playlist"
-```
-
-Use a specific cookie file:
-
-```powershell
-python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist" --cookies ".\cookies.txt"
-```
-
-Override the automatic worker count:
-
-```powershell
-python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist" --workers 2
-```
-
-Automatic worker counts are:
-
-```text
-10 tracks or fewer: 4 workers
-11-99 tracks:       3 workers
-100+ tracks:        2 workers
-```
-
 ### Output files
 
 A playlist folder can contain:
