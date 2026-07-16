@@ -1,0 +1,31 @@
+YouTube Music Downloader v1.0 includes third-party software.
+
+Python
+https://www.python.org/
+Python Software Foundation License
+
+FFmpeg 8.1.1 (Gyan.dev Windows build)
+https://ffmpeg.org/
+https://www.gyan.dev/ffmpeg/builds/
+The bundled build is distributed under GPL-compatible terms. Its LICENSE and README are included in the tools folder. Corresponding FFmpeg source is available from https://ffmpeg.org/releases/ and build information is available from the Gyan.dev URL above.
+
+yt-dlp
+https://github.com/yt-dlp/yt-dlp
+Unlicense
+
+ytmusicapi
+https://github.com/sigma67/ytmusicapi
+MIT License
+
+Mutagen
+https://github.com/quodlibet/mutagen
+GPL-2.0-or-later
+
+Pillow
+https://python-pillow.github.io/
+MIT-CMU License
+
+bgutil-ytdlp-pot-provider
+https://github.com/Brainicism/bgutil-ytdlp-pot-provider
+
+Each Python package's license metadata is also included inside the private runtime produced by PyInstaller.

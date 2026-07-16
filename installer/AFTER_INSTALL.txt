@@ -1,0 +1,9 @@
+Installation files are ready.
+
+Leave "Set up WSL, Docker, the PO-token provider, and optional cookies" selected and click Finish.
+
+If Windows needs a restart for WSL 2, setup will resume automatically after you sign back in. If setup is interrupted, open Start > YouTube Music Downloader > Finish Setup or Repair Prerequisites.
+
+Docker login is not required.
+
+When Windows SmartScreen appears for this unsigned free release, confirm that the file came from the official GitHub release before selecting More info > Run anyway.

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import base64
 import json
+import os
 import re
 import shutil
 import struct
@@ -27,6 +28,7 @@ from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
+APP_VERSION = "1.0.0"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
 DOWNLOAD_ERRORS_NAME = "download_errors.log"
@@ -48,6 +50,46 @@ RESERVED_WINDOWS_NAMES = {
 }
 _YT_DLP_PLUGIN_LOCK = Lock()
 _YT_DLP_PLUGINS_INITIALIZED = False
+
+
+def application_dir() -> Path:
+    """Return the user-visible application folder for source and frozen builds."""
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
+
+
+def configure_bundled_tools() -> None:
+    """Prefer FFmpeg and other command-line tools shipped beside the app."""
+    tools_dir = application_dir() / "tools"
+    if not tools_dir.is_dir():
+        return
+    current_path = os.environ.get("PATH", "")
+    path_parts = current_path.split(os.pathsep) if current_path else []
+    if str(tools_dir) not in path_parts:
+        os.environ["PATH"] = os.pathsep.join([str(tools_dir), *path_parts])
+
+
+def default_cookies_path() -> Path:
+    return application_dir() / DEFAULT_COOKIES_NAME
+
+
+def docker_desktop_candidates() -> list[Path]:
+    """Return Docker Desktop locations without assuming a Windows username."""
+    candidates: list[Path] = []
+    program_files = os.environ.get("ProgramFiles")
+    local_app_data = os.environ.get("LOCALAPPDATA")
+    if program_files:
+        candidates.append(Path(program_files) / "Docker" / "Docker" / "Docker Desktop.exe")
+    if local_app_data:
+        local_root = Path(local_app_data)
+        candidates.extend(
+            [
+                local_root / "Programs" / "DockerDesktop" / "Docker Desktop.exe",
+                local_root / "Docker" / "Docker Desktop.exe",
+            ]
+        )
+    return candidates
 
 
 @dataclass
@@ -1106,7 +1148,7 @@ def prepare_download_options(args: argparse.Namespace) -> DownloadOptions:
         print(f"Using cookies file: {cookies_path}")
         return DownloadOptions(cookies_file=str(cookies_path))
 
-    default_cookies = Path(__file__).resolve().with_name(DEFAULT_COOKIES_NAME)
+    default_cookies = default_cookies_path()
     if default_cookies.exists():
         print(f"Using cookies file: {default_cookies}")
         return DownloadOptions(cookies_file=str(default_cookies))
@@ -1151,7 +1193,7 @@ def choose_output_folder(dialog_title: str) -> str | None:
         selected_folder = filedialog.askdirectory(
             parent=root,
             title=dialog_title,
-            initialdir=str(Path(__file__).resolve().parent),
+            initialdir=str(application_dir()),
             mustexist=True,
         )
     except Exception as exc:
@@ -1211,17 +1253,14 @@ def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
         print("")
         print("If YouTube shows a bot/sign-in error, export cookies with")
         print("'Get cookies.txt LOCALLY' and put the file here:")
-        print(Path(__file__).resolve().with_name(DEFAULT_COOKIES_NAME))
+        print(default_cookies_path())
 
     print("")
     return args
 
 def ensure_docker_desktop_running() -> bool:
     """Quietly open Docker Desktop if the optional Docker engine is unavailable."""
-    docker_desktop_paths = [
-        Path(r"C:\Program Files\Docker\Docker\Docker Desktop.exe"),
-        Path(r"C:\Users\Huy\AppData\Local\Docker\Docker Desktop.exe"),
-    ]
+    docker_desktop_paths = docker_desktop_candidates()
 
     def docker_engine_ready() -> bool:
         try:
@@ -1360,6 +1399,7 @@ def main(argv: list[str] | None = None) -> int:
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(errors="replace")
     install_duplicate_provider_stderr_filter()
+    configure_bundled_tools()
 
     args = ask_for_missing_inputs(parse_args(argv or sys.argv[1:]))
     check_ffmpeg()

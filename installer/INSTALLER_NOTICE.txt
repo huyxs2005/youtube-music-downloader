@@ -1,0 +1,11 @@
+YOUTUBE MUSIC DOWNLOADER v1.0
+
+This is the free unsigned release. Windows may display an "Unknown publisher" or SmartScreen warning. Download this installer only from the official GitHub repository:
+
+https://github.com/huyxs2005/youtube-music-downloader/releases
+
+The installer includes a private Python runtime and FFmpeg. It can install Docker Desktop from Docker's official HTTPS download endpoint. Docker is used only to run the public PO-token provider, and a Docker login is not required.
+
+Docker Desktop has separate license terms. The first-time setup displays those terms and asks before installing Docker. Depending on the Windows configuration, WSL 2 setup may require administrator approval and one restart.
+
+The installer never bundles cookies.txt and never deletes downloaded music folders.

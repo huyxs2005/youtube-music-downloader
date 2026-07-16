@@ -45,7 +45,33 @@ or modify existing audio. Existing numbered files such as
 
 ---
 
-## Requirements
+## Windows Installer (v1.0)
+
+For the easiest setup, download the Windows installer from the
+[GitHub Releases page](https://github.com/huyxs2005/youtube-music-downloader/releases).
+
+The installer provides:
+
+* a self-contained downloader with a private Python runtime
+* bundled FFmpeg and FFprobe with no PATH setup
+* guided WSL 2 and Docker Desktop installation
+* automatic setup of the public PO-token provider
+* optional guided `cookies.txt` selection
+* Start Menu and optional desktop shortcuts
+
+Docker login is not required. If WSL 2 is not enabled yet, Windows may require
+one restart; setup records its progress and resumes after sign-in.
+
+The free v1.0 installer is unsigned, so Windows may display an **Unknown
+publisher** or SmartScreen warning. Download it only from the official release,
+verify the published SHA-256 checksum, and then use **More info > Run anyway**.
+
+The installer never contains `cookies.txt`, and installing, updating, or
+uninstalling the program does not delete downloaded music folders.
+
+---
+
+## Requirements for Running from Source
 
 Install these first:
 

@@ -5,3 +5,7 @@ format_bug_test/
 downloads/
 download_errors.log
 cookies.txt
+.venv-build/
+build/
+dist/
+installer/output/
