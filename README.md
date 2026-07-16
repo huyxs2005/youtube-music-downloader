@@ -3,7 +3,7 @@
 Download a YouTube Music playlist into stable `.opus` audio files and a
 Poweramp-compatible `.m3u8` playlist.
 
-WARNING: USE A THROWAWAY EMAIL IF YOU DECIDE TO USE THE cookie.txt SINCE YOU CAN GET A BAN FROM YOUTUBE, I WON'T HOLD RESONSIBLE 
+WARNING: USE A THROWAWAY EMAIL IF YOU DECIDE TO USE THE cookie.txt SINCE YOU CAN GET A BAN FROM YOUTUBE, I WON'T HOLD RESONSIBLE
 
 This project uses:
 
