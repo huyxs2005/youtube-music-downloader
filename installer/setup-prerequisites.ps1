@@ -18,6 +18,29 @@ $CookieExtensionUrl = "https://chromewebstore.google.com/detail/get-cookiestxt-l
 $YouTubeMusicUrl = "https://music.youtube.com/"
 $DockerConfigDir = Join-Path $env:TEMP "youtube-music-downloader-docker-config"
 
+$Identity = [Security.Principal.WindowsIdentity]::GetCurrent()
+$Principal = New-Object Security.Principal.WindowsPrincipal($Identity)
+if (-not $Principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+    $ElevationArguments = "-NoProfile -ExecutionPolicy Bypass -File `"$PSCommandPath`""
+    if ($Resume) {
+        $ElevationArguments += " -Resume"
+    }
+    if ($NoLaunch) {
+        $ElevationArguments += " -NoLaunch"
+    }
+    if ($SkipCookies) {
+        $ElevationArguments += " -SkipCookies"
+    }
+    try {
+        $Elevated = Start-Process -FilePath "powershell.exe" -ArgumentList $ElevationArguments -Verb RunAs -Wait -PassThru
+        exit $Elevated.ExitCode
+    }
+    catch {
+        Write-Host "Administrator approval is required to finish setup." -ForegroundColor Red
+        exit 1
+    }
+}
+
 # Pull the public image anonymously without depending on or changing the user's
 # Docker Desktop credential helper configuration.
 New-Item -ItemType Directory -Path $DockerConfigDir -Force | Out-Null
