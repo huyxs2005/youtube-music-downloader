@@ -31,6 +31,7 @@ or modify existing audio. Existing numbered files such as
 ## Features
 
 * Downloads YouTube Music playlists as `.opus`
+* Adds a single song to position 1 of an existing downloaded playlist
 * Embeds title, artist, album, track number, and cover thumbnail metadata
 * Generates a UTF-8 Poweramp `.m3u8` in current YouTube Music order
 * Skips songs that were already downloaded
@@ -102,8 +103,7 @@ Download Playlist.bat
 The program will ask:
 
 ```text
-Paste the YouTube Music playlist URL:
-Output folder:
+Paste a YouTube Music playlist or song URL:
 ```
 
 Paste a playlist URL like:
@@ -112,13 +112,38 @@ Paste a playlist URL like:
 https://music.youtube.com/playlist?list=PLAYLIST_ID
 ```
 
-For the output folder, you can either type a folder path:
+After you enter the URL, a Windows folder-selection dialog opens. Select the
+folder that should contain the songs, manifest, and M3U8 playlist:
 
 ```text
 D:\Music\My Playlist
 ```
 
-or press Enter to use the default `downloads` folder.
+Closing or cancelling the folder dialog stops the downloader and closes its
+CMD window. The folder picker also appears when you choose to download another
+playlist or song.
+
+### Add One Song to the Top of an Existing Playlist
+
+Double-click `Download Playlist.bat` and paste a song URL instead of a playlist
+URL, for example:
+
+```text
+https://music.youtube.com/watch?v=VIDEO_ID
+```
+
+When the folder picker opens, choose the existing downloaded playlist folder.
+It must contain `playlist_manifest.json`. The downloader will:
+
+* download only that song, unless its audio already exists
+* keep its existing filename if the song is already in the manifest
+* move/insert it at playlist position 1
+* update both `playlist_manifest.json` and the title-based `.m3u8`
+* keep manually added songs at the top during future full-playlist syncs
+
+The newest manually added song becomes first. Previously added manual songs
+remain immediately below it. Copy the new `.opus` file and updated `.m3u8` to
+the same playlist folder on the phone, then let Poweramp rescan its library.
 
 ---
 
@@ -130,6 +155,12 @@ Run from the project folder:
 cd "D:\Youtube Music Downloader"
 
 python ytmusic_downloader.py "https://music.youtube.com/playlist?list=PLAYLIST_ID" --output "D:\Music\My Playlist"
+```
+
+Add one song to the top of an existing downloaded playlist:
+
+```powershell
+python ytmusic_downloader.py "https://music.youtube.com/watch?v=VIDEO_ID" --output "D:\Music\My Playlist"
 ```
 
 Use a specific cookies file:
@@ -241,6 +272,10 @@ After this setup, the Python script can automatically:
 3. Start the `bgutil-provider` container
 4. Download with PO-token support
 
+The normal downloader keeps optional Docker/PO-token provider diagnostics
+silent. If the provider is unavailable, it continues with the regular download
+flow without filling the CMD window with token errors.
+
 After restarting your PC, you should usually only need to run the `.bat` file again.
 
 ---
@@ -301,7 +336,10 @@ are omitted until a later retry succeeds.
 each `videoId`, the current playlist index, and the generated M3U8 filename.
 This lets the script skip already downloaded songs on later runs.
 
-`download_errors.log` appears if some tracks fail.
+`download_errors.log` appears only when tracks fail. It contains one readable
+song entry per current failure, without Docker/token diagnostics or Python
+tracebacks. Each run replaces the old report, and a fully successful retry
+removes it automatically.
 
 ---
 

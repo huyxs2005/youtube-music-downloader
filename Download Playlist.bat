@@ -18,6 +18,7 @@ goto finish
 
 :run_downloader
 "%PYTHON_EXE%" "%~dp0ytmusic_downloader.py" %*
+if %errorlevel% equ 20 exit /b 0
 
 :finish
 echo.

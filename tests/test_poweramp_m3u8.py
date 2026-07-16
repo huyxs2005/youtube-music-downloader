@@ -172,6 +172,11 @@ class PowerampM3U8Tests(unittest.TestCase):
             self.assertEqual(first_result, 1)
             self.assertEqual((output_dir / "New Name.m3u8").read_text(encoding="utf-8"), "#EXTM3U\n")
             self.assertTrue((output_dir / downloader.FAILED_DOWNLOADS_NAME).exists())
+            error_text = (output_dir / downloader.DOWNLOAD_ERRORS_NAME).read_text(
+                encoding="utf-8"
+            )
+            self.assertEqual(error_text, downloader.failed_track_line(track) + "\n")
+            self.assertNotIn("download failed", error_text)
             self.assertFalse(old_playlist.exists())
             self.assertTrue(unrelated_playlist.exists())
 
@@ -189,6 +194,7 @@ class PowerampM3U8Tests(unittest.TestCase):
 
             self.assertEqual(retry_result, 0)
             self.assertFalse((output_dir / downloader.FAILED_DOWNLOADS_NAME).exists())
+            self.assertFalse((output_dir / downloader.DOWNLOAD_ERRORS_NAME).exists())
             playlist_text = (output_dir / "New Name.m3u8").read_text(encoding="utf-8")
             self.assertIn("#EXTINF:-1,Beyoncé - Déjà Vu", playlist_text)
             self.assertIn(track.filename, playlist_text)

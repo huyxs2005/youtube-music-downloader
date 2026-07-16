@@ -10,24 +10,27 @@ import re
 import shutil
 import struct
 import sys
-import traceback
 import subprocess
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
+from threading import Lock
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 from ytmusicapi import YTMusic
 from yt_dlp import YoutubeDL
+from yt_dlp.extractor import gen_extractor_classes
 from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
+DOWNLOAD_ERRORS_NAME = "download_errors.log"
+USER_CANCELLED_EXIT_CODE = 20
 YT_DLP_SLEEP_REQUESTS_SECONDS = 5
 YT_DLP_SLEEP_INTERVAL_SECONDS = 10
 YT_DLP_MAX_SLEEP_INTERVAL_SECONDS = 30
@@ -43,6 +46,8 @@ RESERVED_WINDOWS_NAMES = {
     *(f"COM{i}" for i in range(1, 10)),
     *(f"LPT{i}" for i in range(1, 10)),
 }
+_YT_DLP_PLUGIN_LOCK = Lock()
+_YT_DLP_PLUGINS_INITIALIZED = False
 
 
 @dataclass
@@ -62,6 +67,82 @@ class DownloadOptions:
     cookies_file: str | None = None
 
 
+class QuietYtdlpLogger:
+    """Suppress yt-dlp internals; this script reports failed tracks itself."""
+
+    @staticmethod
+    def debug(_message: str) -> None:
+        pass
+
+    @staticmethod
+    def info(_message: str) -> None:
+        pass
+
+    @staticmethod
+    def warning(_message: str) -> None:
+        pass
+
+    @staticmethod
+    def error(_message: str) -> None:
+        pass
+
+
+class DuplicateProviderStderrFilter:
+    """Hide only yt-dlp's harmless duplicate BgUtils provider traceback."""
+
+    def __init__(self, stream: Any) -> None:
+        self.stream = stream
+
+    @staticmethod
+    def is_duplicate_provider_message(message: str) -> bool:
+        return (
+            "Error while importing module "
+            "'yt_dlp_plugins.extractor.getpot_bgutil_" in message
+            and "AssertionError: PoTokenProvider" in message
+            and "already registered" in message
+        )
+
+    def write(self, message: str) -> int:
+        if self.is_duplicate_provider_message(message):
+            return len(message)
+        return self.stream.write(message)
+
+    def flush(self) -> None:
+        self.stream.flush()
+
+    def isatty(self) -> bool:
+        return bool(getattr(self.stream, "isatty", lambda: False)())
+
+    def fileno(self) -> int:
+        return self.stream.fileno()
+
+    @property
+    def encoding(self) -> str | None:
+        return getattr(self.stream, "encoding", None)
+
+    @property
+    def errors(self) -> str | None:
+        return getattr(self.stream, "errors", None)
+
+
+def install_duplicate_provider_stderr_filter() -> None:
+    """Install the targeted stderr filter once for the CMD process."""
+    if not isinstance(sys.stderr, DuplicateProviderStderrFilter):
+        sys.stderr = DuplicateProviderStderrFilter(sys.stderr)
+
+
+def initialize_yt_dlp_plugins() -> None:
+    """Load yt-dlp plugins once, before concurrent workers can race to do it."""
+    global _YT_DLP_PLUGINS_INITIALIZED
+    if _YT_DLP_PLUGINS_INITIALIZED:
+        return
+    with _YT_DLP_PLUGIN_LOCK:
+        if _YT_DLP_PLUGINS_INITIALIZED:
+            return
+        gen_extractor_classes()
+        _YT_DLP_PLUGINS_INITIALIZED = True
+
+
 def parse_playlist_id(playlist_url: str) -> str:
     """Extract the playlist id from a YouTube Music playlist URL."""
     parsed = urlparse(playlist_url)
@@ -71,14 +152,34 @@ def parse_playlist_id(playlist_url: str) -> str:
     return playlist_id
 
 
-def validate_playlist_url(playlist_url: str) -> str:
-    playlist_url = playlist_url.strip().strip('"')
-    if not playlist_url:
-        raise ValueError("Playlist URL is required.")
+def parse_video_id(song_url: str) -> str:
+    """Extract a videoId from a YouTube or YouTube Music song URL."""
+    parsed = urlparse(song_url)
+    if parsed.netloc.lower() == "youtu.be":
+        video_id = parsed.path.strip("/").split("/", 1)[0]
+    else:
+        video_id = parse_qs(parsed.query).get("v", [None])[0]
+    if not video_id:
+        raise ValueError("Could not find a video id in the URL. Expected ?v=VIDEO_ID.")
+    return video_id
 
-    parsed = urlparse(playlist_url)
+
+def is_playlist_url(youtube_url: str) -> bool:
+    parsed = urlparse(youtube_url)
+    query = parse_qs(parsed.query)
+    if parsed.netloc.lower() == "youtu.be" or query.get("v", [None])[0]:
+        return False
+    return bool(query.get("list", [None])[0])
+
+
+def validate_download_url(youtube_url: str) -> str:
+    youtube_url = youtube_url.strip().strip('"')
+    if not youtube_url:
+        raise ValueError("A playlist or song URL is required.")
+
+    parsed = urlparse(youtube_url)
     if parsed.scheme not in {"http", "https"}:
-        raise ValueError("Playlist URL must start with http:// or https://.")
+        raise ValueError("The URL must start with http:// or https://.")
 
     host = parsed.netloc.lower()
     valid_hosts = {
@@ -86,10 +187,21 @@ def validate_playlist_url(playlist_url: str) -> str:
         "www.youtube.com",
         "youtube.com",
         "m.youtube.com",
+        "youtu.be",
     }
     if host not in valid_hosts:
-        raise ValueError("Expected a YouTube or YouTube Music playlist URL.")
+        raise ValueError("Expected a YouTube or YouTube Music playlist or song URL.")
 
+    if is_playlist_url(youtube_url):
+        parse_playlist_id(youtube_url)
+    else:
+        parse_video_id(youtube_url)
+    return youtube_url
+
+
+def validate_playlist_url(playlist_url: str) -> str:
+    """Backward-compatible strict validator for playlist-only callers."""
+    playlist_url = validate_download_url(playlist_url)
     parse_playlist_id(playlist_url)
     return playlist_url
 
@@ -205,7 +317,9 @@ def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
         title=title,
         artists=artists,
         album=album_name,
-        thumbnail_url=best_thumbnail_url(raw_track.get("thumbnails", [])),
+        thumbnail_url=best_thumbnail_url(
+            raw_track.get("thumbnails") or raw_track.get("thumbnail") or []
+        ),
         filename=build_filename(artists, title, video_id),
     )
 
@@ -237,6 +351,27 @@ def fetch_playlist_tracks(playlist_url: str) -> tuple[str, str, int, list[Track]
             skipped_items.append(original_index)
 
     return playlist_id, playlist_title, len(playlist_items), tracks, skipped_items
+
+
+def fetch_single_track(song_url: str) -> Track:
+    """Fetch metadata for one YouTube Music song URL."""
+    video_id = parse_video_id(song_url)
+    watch_playlist = YTMusic().get_watch_playlist(videoId=video_id, limit=1)
+    raw_tracks = watch_playlist.get("tracks", [])
+    raw_track = next(
+        (
+            item
+            for item in raw_tracks
+            if isinstance(item, dict) and item.get("videoId") == video_id
+        ),
+        None,
+    )
+    if raw_track is None:
+        raise ValueError(f"YouTube Music returned no metadata for videoId {video_id}.")
+    track = track_from_ytmusic(raw_track, 1)
+    if track is None:
+        raise ValueError(f"YouTube Music returned an unavailable track for videoId {video_id}.")
+    return track
 
 
 def manifest_by_video_id(manifest: dict[str, Any]) -> dict[str, dict[str, Any]]:
@@ -285,6 +420,7 @@ def run_yt_dlp_download(
     temp_stem: Path,
     format_selector: str,
 ) -> Path:
+    initialize_yt_dlp_plugins()
     ydl_opts = {
         "format": format_selector,
         "outtmpl": str(temp_stem) + ".%(ext)s",
@@ -292,6 +428,7 @@ def run_yt_dlp_download(
         "quiet": True,
         "no_warnings": True,
         "noprogress": True,
+        "logger": QuietYtdlpLogger(),
         "sleep_interval_requests": YT_DLP_SLEEP_REQUESTS_SECONDS,
         "sleep_interval": YT_DLP_SLEEP_INTERVAL_SECONDS,
         "max_sleep_interval": YT_DLP_MAX_SLEEP_INTERVAL_SECONDS,
@@ -484,8 +621,25 @@ def failed_track_line(track: Track) -> str:
     return f"{track.index:03d}. {artist_text} - {track.title} ({url})"
 
 
-def manifest_entry(track: Track) -> dict[str, Any]:
-    return {
+def write_download_errors(output_dir: Path, failed_tracks: list[Track]) -> Path:
+    """Write only the current failed songs, replacing any stale error details."""
+    path = output_dir / DOWNLOAD_ERRORS_NAME
+    if not failed_tracks:
+        if path.exists():
+            path.unlink()
+        return path
+
+    temp_path = path.with_name(f"{path.name}.tmp")
+    with temp_path.open("w", encoding="utf-8", newline="\n") as file:
+        for track in failed_tracks:
+            file.write(failed_track_line(track))
+            file.write("\n")
+    temp_path.replace(path)
+    return path
+
+
+def manifest_entry(track: Track, manually_added: bool = False) -> dict[str, Any]:
+    entry = {
         "videoId": track.video_id,
         "setVideoId": track.set_video_id,
         "title": track.title,
@@ -495,6 +649,58 @@ def manifest_entry(track: Track) -> dict[str, Any]:
         "playlist_index": track.index,
         "output_filename": track.filename,
     }
+    if manually_added:
+        entry["manually_added"] = True
+    return entry
+
+
+def track_from_manifest_entry(entry: dict[str, Any]) -> Track | None:
+    video_id = entry.get("videoId")
+    filename = safe_manifest_filename(entry.get("output_filename"), ".opus")
+    if not video_id or not filename:
+        return None
+    artists = entry.get("artists")
+    if not isinstance(artists, list):
+        artists = []
+    return Track(
+        index=int(entry.get("playlist_index") or 0),
+        video_id=str(video_id),
+        set_video_id=entry.get("setVideoId"),
+        title=str(entry.get("title") or "Untitled"),
+        artists=[str(artist) for artist in artists if artist],
+        album=str(entry["album"]) if entry.get("album") else None,
+        thumbnail_url=(
+            str(entry["thumbnail_url"]) if entry.get("thumbnail_url") else None
+        ),
+        filename=filename,
+    )
+
+
+def prepend_manual_tracks(
+    manifest: dict[str, Any],
+    playlist_tracks: list[Track],
+) -> list[Track]:
+    """Keep locally added songs ahead of the current remote playlist order."""
+    manual_entries = sorted(
+        (
+            entry
+            for entry in manifest.get("tracks", [])
+            if isinstance(entry, dict) and entry.get("manually_added")
+        ),
+        key=lambda entry: int(entry.get("playlist_index") or sys.maxsize),
+    )
+    manual_tracks = [
+        track
+        for entry in manual_entries
+        if (track := track_from_manifest_entry(entry)) is not None
+    ]
+    manual_video_ids = {track.video_id for track in manual_tracks}
+    combined_tracks = manual_tracks + [
+        track for track in playlist_tracks if track.video_id not in manual_video_ids
+    ]
+    for index, track in enumerate(combined_tracks, start=1):
+        track.index = index
+    return combined_tracks
 
 
 def write_poweramp_m3u8(
@@ -537,6 +743,166 @@ def write_poweramp_m3u8(
     return m3u8_path, included_count
 
 
+def current_manifest_playlist_tracks(
+    output_dir: Path,
+    manifest: dict[str, Any],
+) -> list[Track]:
+    """Rebuild the active playlist order from its M3U8 and manifest."""
+    entries_by_filename = {
+        filename: entry
+        for entry in manifest.get("tracks", [])
+        if isinstance(entry, dict)
+        and (filename := safe_manifest_filename(entry.get("output_filename"), ".opus"))
+    }
+    m3u8_filename = safe_manifest_filename(manifest.get("m3u8_filename"), ".m3u8")
+    ordered_entries: list[dict[str, Any]] = []
+    if m3u8_filename:
+        m3u8_path = output_dir / m3u8_filename
+        if m3u8_path.is_file():
+            for line in m3u8_path.read_text(encoding="utf-8-sig").splitlines():
+                filename = line.strip()
+                if filename and not filename.startswith("#"):
+                    entry = entries_by_filename.get(filename)
+                    if entry:
+                        ordered_entries.append(entry)
+
+    if not ordered_entries:
+        ordered_entries = sorted(
+            (
+                entry
+                for entry in manifest.get("tracks", [])
+                if isinstance(entry, dict)
+            ),
+            key=lambda entry: int(entry.get("playlist_index") or sys.maxsize),
+        )
+
+    return [
+        track
+        for entry in ordered_entries
+        if (track := track_from_manifest_entry(entry)) is not None
+    ]
+
+
+def sync_single_track(
+    song_url: str,
+    output_dir: Path | None,
+    options: DownloadOptions,
+) -> int:
+    """Download one song into an existing playlist and insert it first."""
+    if output_dir is None:
+        print("A single song requires an existing playlist folder.")
+        return 1
+    if not output_dir.is_dir():
+        print(f"Existing playlist folder not found: {output_dir}")
+        return 1
+
+    manifest_path = output_dir / MANIFEST_NAME
+    if not manifest_path.is_file():
+        print(f"No {MANIFEST_NAME} was found in: {output_dir}")
+        print("Choose a folder previously created by this downloader.")
+        return 1
+
+    manifest = load_manifest(manifest_path)
+    playlist_id = str(manifest.get("playlist_id") or "local-playlist")
+    playlist_title = str(manifest.get("playlist_title") or output_dir.name)
+    previous_m3u8_filename = manifest.get("m3u8_filename")
+    known_tracks = manifest_by_video_id(manifest)
+    current_tracks = current_manifest_playlist_tracks(output_dir, manifest)
+    track = fetch_single_track(song_url)
+    old_entry = known_tracks.get(track.video_id)
+    old_filename = safe_manifest_filename(
+        old_entry.get("output_filename") if old_entry else None,
+        ".opus",
+    )
+    if old_filename:
+        track.filename = old_filename
+
+    ordered_tracks = [track] + [
+        existing_track
+        for existing_track in current_tracks
+        if existing_track.video_id != track.video_id
+    ]
+    for index, ordered_track in enumerate(ordered_tracks, start=1):
+        ordered_track.index = index
+        existing_entry = known_tracks.get(ordered_track.video_id, {})
+        manually_added = (
+            ordered_track.video_id == track.video_id
+            or bool(existing_entry.get("manually_added"))
+        )
+        known_tracks[ordered_track.video_id] = manifest_entry(
+            ordered_track,
+            manually_added,
+        )
+
+    save_manifest(
+        manifest_path,
+        playlist_id,
+        known_tracks,
+        playlist_title,
+        previous_m3u8_filename,
+    )
+
+    final_path = output_dir / track.filename
+    download_failed = False
+    if final_path.is_file():
+        print(f"Already downloaded; moving to playlist position 1: {track.filename}")
+    else:
+        print(f"Downloading single song: {artists_to_text(track.artists)} - {track.title}")
+        try:
+            temp_output = download_track(track, output_dir, options)
+            ensure_final_path(temp_output, final_path)
+            print(f"Downloaded: {track.filename}")
+            if apply_track_metadata(final_path, track):
+                print(f"Updated metadata: {track.filename}")
+        except Exception:
+            download_failed = True
+            print(f"Failed: {track.title} ({track.video_id})")
+
+    write_download_errors(output_dir, [track] if download_failed else [])
+
+    failed_tracks = [
+        ordered_track
+        for ordered_track in ordered_tracks
+        if not (output_dir / ordered_track.filename).is_file()
+    ]
+    failed_downloads_path = output_dir / FAILED_DOWNLOADS_NAME
+    if failed_tracks:
+        with failed_downloads_path.open("w", encoding="utf-8") as file:
+            file.write(f"Failed downloads for {playlist_title}\n")
+            file.write(f"Latest song: {song_url}\n")
+            file.write(f"Count: {len(failed_tracks)}\n\n")
+            for failed_track in failed_tracks:
+                file.write(failed_track_line(failed_track))
+                file.write("\n")
+    elif failed_downloads_path.exists():
+        failed_downloads_path.unlink()
+
+    m3u8_path, included_count = write_poweramp_m3u8(
+        output_dir,
+        playlist_title,
+        ordered_tracks,
+        known_tracks,
+        previous_m3u8_filename,
+    )
+    save_manifest(
+        manifest_path,
+        playlist_id,
+        known_tracks,
+        playlist_title,
+        m3u8_path.name,
+    )
+
+    print("")
+    print("Single-song update complete")
+    print(f"  Playlist position: 1")
+    print(f"  Audio: {final_path}")
+    print(f"  Manifest: {manifest_path}")
+    print(f"  M3U8: {m3u8_path} ({included_count} tracks)")
+    if failed_tracks:
+        print(f"  Failed list: {failed_downloads_path}")
+    return 1 if download_failed else 0
+
+
 def sync_playlist(
     playlist_url: str,
     output_dir: Path | None,
@@ -552,16 +918,22 @@ def sync_playlist(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / MANIFEST_NAME
+    manifest = load_manifest(manifest_path)
+    tracks = prepend_manual_tracks(manifest, tracks)
+    manual_track_count = sum(
+        1 for item in manifest.get("tracks", []) if item.get("manually_added")
+    )
 
     print(f"Playlist: {playlist_title}")
     print(f"Total playlist items found: {total_items}")
     print(f"Total tracks found: {len(tracks)}")
+    if manual_track_count:
+        print(f"Manually added tracks kept at top: {manual_track_count}")
     selected_max_workers = max_workers if max_workers is not None else automatic_worker_count(len(tracks))
     print(f"Worker mode: {'manual' if max_workers is not None else 'auto'} ({selected_max_workers} workers max)")
     for item_index in skipped_items:
         print(f"Skipping playlist item {item_index:03d}: no videoId found")
 
-    manifest = load_manifest(manifest_path)
     known_tracks = manifest_by_video_id(manifest)
     previous_m3u8_filename = manifest.get("m3u8_filename")
     success_count = 0
@@ -584,7 +956,8 @@ def sync_playlist(
             track.filename = old_filename
 
         final_path = output_dir / track.filename
-        known_tracks[track.video_id] = manifest_entry(track)
+        manually_added = bool(old_entry and old_entry.get("manually_added"))
+        known_tracks[track.video_id] = manifest_entry(track, manually_added)
         save_manifest(
             manifest_path,
             playlist_id,
@@ -610,15 +983,10 @@ def sync_playlist(
                     previous_m3u8_filename,
                 )
                 success_count += 1
-        except Exception as exc:  # Keep the playlist moving if one song fails.
+        except Exception:  # Keep the playlist moving if one song fails.
             failed_count += 1
             failed_tracks.append(track)
             print(f"Failed: {track.index:03d} - {track.title} ({track.video_id})")
-            print(f"  {exc}")
-            with (output_dir / "download_errors.log").open("a", encoding="utf-8") as log_file:
-                log_file.write(f"{track.index:03d} {track.video_id} {track.title}\n")
-                log_file.write("".join(traceback.format_exception(exc)))
-                log_file.write("\n")
 
         if stop_after_video_id and track.video_id == stop_after_video_id:
             print(f"Stopping after requested test videoId: {stop_after_video_id}")
@@ -640,11 +1008,6 @@ def sync_playlist(
                     failed_count += 1
                     failed_tracks.append(track)
                     print(f"Failed: {track.index:03d} - {track.title} ({track.video_id})")
-                    print(f"  {exc}")
-                    with (output_dir / "download_errors.log").open("a", encoding="utf-8") as log_file:
-                        log_file.write(f"{track.index:03d} {track.video_id} {track.title}\n")
-                        log_file.write("".join(traceback.format_exception(exc)))
-                        log_file.write("\n")
                     continue
 
                 print(f"Downloaded: {track.filename}")
@@ -652,7 +1015,11 @@ def sync_playlist(
                 if apply_track_metadata(final_path, track):
                     print(f"Updated metadata: {track.filename}")
                     metadata_count += 1
-                known_tracks[track.video_id] = manifest_entry(track)
+                downloaded_entry = known_tracks.get(track.video_id, {})
+                known_tracks[track.video_id] = manifest_entry(
+                    track,
+                    bool(downloaded_entry.get("manually_added")),
+                )
                 save_manifest(
                     manifest_path,
                     playlist_id,
@@ -663,6 +1030,7 @@ def sync_playlist(
                 downloaded_count += 1
                 success_count += 1
 
+    write_download_errors(output_dir, failed_tracks)
     failed_downloads_path = output_dir / FAILED_DOWNLOADS_NAME
     if failed_tracks:
         with failed_downloads_path.open("w", encoding="utf-8") as file:
@@ -728,8 +1096,14 @@ def prepare_download_options(args: argparse.Namespace) -> DownloadOptions:
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Download a YouTube Music playlist as stable OPUS files with an M3U8.")
-    parser.add_argument("playlist_url", nargs="?", help="YouTube Music playlist URL, for example https://music.youtube.com/playlist?list=...")
+    parser = argparse.ArgumentParser(
+        description="Download a YouTube Music playlist, or add one song to an existing downloaded playlist."
+    )
+    parser.add_argument(
+        "playlist_url",
+        nargs="?",
+        help="YouTube Music playlist or song URL.",
+    )
     parser.add_argument("--output", help="Output folder for OPUS files and playlist_manifest.json.")
     parser.add_argument(
         "--workers",
@@ -742,30 +1116,72 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def choose_output_folder(dialog_title: str) -> str | None:
+    """Open a native folder picker and return None when the user cancels."""
+    print("Opening folder picker...")
+    root = None
+    try:
+        import tkinter as tk
+        from tkinter import filedialog
+
+        root = tk.Tk()
+        root.withdraw()
+        root.attributes("-topmost", True)
+        root.update()
+        selected_folder = filedialog.askdirectory(
+            parent=root,
+            title=dialog_title,
+            initialdir=str(Path(__file__).resolve().parent),
+            mustexist=True,
+        )
+    except Exception as exc:
+        print(f"Folder picker could not be opened ({exc}).")
+        selected_folder = ""
+    finally:
+        if root is not None:
+            root.destroy()
+
+    if selected_folder:
+        print(f"Output folder: {selected_folder}")
+        return selected_folder
+
+    print("Folder selection cancelled. Closing downloader.")
+    return None
+
+
 def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
     """Prompt for required values when the script is launched by double-click."""
     launched_without_required_inputs = not args.playlist_url
 
     if not launched_without_required_inputs:
         try:
-            args.playlist_url = validate_playlist_url(args.playlist_url)
+            args.playlist_url = validate_download_url(args.playlist_url)
         except ValueError as exc:
-            raise SystemExit(f"Invalid playlist URL: {exc}") from exc
+            raise SystemExit(f"Invalid YouTube Music URL: {exc}") from exc
         return args
 
-    print("YouTube Music Playlist Downloader")
+    print("YouTube Music Downloader")
     print("")
 
     if not args.playlist_url:
         while True:
             try:
-                args.playlist_url = validate_playlist_url(input("Paste the YouTube Music playlist URL: "))
+                args.playlist_url = validate_download_url(
+                    input("Paste a YouTube Music playlist or song URL: ")
+                )
                 break
             except ValueError as exc:
-                print(f"Invalid playlist URL: {exc}")
+                print(f"Invalid YouTube Music URL: {exc}")
 
     if not args.output:
-        print("Output folder: automatic, using playlist name")
+        if is_playlist_url(args.playlist_url):
+            args.output = choose_output_folder("Choose where to save this playlist")
+        else:
+            args.output = choose_output_folder(
+                "Choose the existing playlist folder for this song"
+            )
+        if not args.output:
+            raise SystemExit(USER_CANCELLED_EXIT_CODE)
 
     if not args.cookies:
         print("")
@@ -777,54 +1193,50 @@ def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
     return args
 
 def ensure_docker_desktop_running() -> bool:
-    """Open Docker Desktop if Docker engine is not available yet."""
+    """Quietly open Docker Desktop if the optional Docker engine is unavailable."""
     docker_desktop_paths = [
         Path(r"C:\Program Files\Docker\Docker\Docker Desktop.exe"),
         Path(r"C:\Users\Huy\AppData\Local\Docker\Docker Desktop.exe"),
     ]
 
     def docker_engine_ready() -> bool:
-        result = subprocess.run(
-            ["docker", "info"],
-            capture_output=True,
-            text=True,
-        )
-        return result.returncode == 0
+        try:
+            result = subprocess.run(
+                ["docker", "info"],
+                capture_output=True,
+                text=True,
+            )
+            return result.returncode == 0
+        except OSError:
+            return False
 
     if docker_engine_ready():
         return True
 
-    print("Docker engine is not ready. Trying to start Docker Desktop...")
-
     docker_desktop = next((path for path in docker_desktop_paths if path.exists()), None)
 
     if not docker_desktop:
-        print("Could not find Docker Desktop.exe.")
-        print("Please open Docker Desktop manually.")
         return False
 
-    subprocess.Popen(
-        [str(docker_desktop)],
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    )
-
-    print("Waiting for Docker Desktop to start...")
+    try:
+        subprocess.Popen(
+            [str(docker_desktop)],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError:
+        return False
 
     for _ in range(60):
         if docker_engine_ready():
-            print("Docker Desktop is running.")
             return True
         time.sleep(2)
 
-    print("Docker Desktop did not become ready in time.")
-    print("Please open Docker Desktop manually.")
     return False
 
 def ensure_po_provider_running() -> None:
-    """Start the bgutil PO-token provider Docker container if available."""
+    """Quietly start the optional bgutil PO-token provider when available."""
     if not ensure_docker_desktop_running():
-        print("Continuing without PO-token provider. Downloads may hit HTTP 403.")
         return
 
     container_name = "bgutil-provider"
@@ -839,51 +1251,46 @@ def ensure_po_provider_running() -> None:
             return False
 
     if provider_is_alive():
-        print("PO-token provider is already running.")
         return
 
-    print("Starting PO-token provider Docker container...")
-
     # Try starting existing container first.
-    start_result = subprocess.run(
-        ["docker", "start", container_name],
-        capture_output=True,
-        text=True,
-    )
-
-    # If container does not exist, create it.
-    if start_result.returncode != 0:
-        print("PO-token container not found. Creating it...")
-        run_result = subprocess.run(
-            [
-                "docker",
-                "run",
-                "-d",
-                "--name",
-                container_name,
-                "-p",
-                "4416:4416",
-                image_name,
-            ],
+    try:
+        start_result = subprocess.run(
+            ["docker", "start", container_name],
             capture_output=True,
             text=True,
         )
+    except OSError:
+        return
+
+    # If container does not exist, create it.
+    if start_result.returncode != 0:
+        try:
+            run_result = subprocess.run(
+                [
+                    "docker",
+                    "run",
+                    "-d",
+                    "--name",
+                    container_name,
+                    "-p",
+                    "4416:4416",
+                    image_name,
+                ],
+                capture_output=True,
+                text=True,
+            )
+        except OSError:
+            return
 
         if run_result.returncode != 0:
-            print("Could not start PO-token provider.")
-            print(run_result.stderr.strip())
-            print("Continuing anyway, but downloads may hit HTTP 403.")
             return
 
     # Wait a bit for the server to become ready.
     for _ in range(10):
         if provider_is_alive():
-            print("PO-token provider is running.")
             return
         time.sleep(1)
-
-    print("PO-token provider did not respond on http://127.0.0.1:4416/ping")
-    print("Continuing anyway, but downloads may hit HTTP 403.")
 
 
 def ask_yes_no(prompt: str, default: bool = False) -> bool:
@@ -897,13 +1304,21 @@ def ask_yes_no(prompt: str, default: bool = False) -> bool:
 def ask_for_next_playlist(args: argparse.Namespace) -> argparse.Namespace:
     while True:
         try:
-            args.playlist_url = validate_playlist_url(input("Paste the next YouTube Music playlist URL: "))
+            args.playlist_url = validate_download_url(
+                input("Paste the next YouTube Music playlist or song URL: ")
+            )
             break
         except ValueError as exc:
-            print(f"Invalid playlist URL: {exc}")
+            print(f"Invalid YouTube Music URL: {exc}")
 
-    output = input("Output folder for next playlist (press Enter for automatic): ").strip().strip('"')
-    args.output = output or None
+    if is_playlist_url(args.playlist_url):
+        args.output = choose_output_folder("Choose where to save the next playlist")
+    else:
+        args.output = choose_output_folder(
+            "Choose the existing playlist folder for this song"
+        )
+    if not args.output:
+        raise SystemExit(USER_CANCELLED_EXIT_CODE)
 
     print("")
     return args
@@ -916,6 +1331,7 @@ def main(argv: list[str] | None = None) -> int:
         sys.stdout.reconfigure(errors="replace")
     if hasattr(sys.stderr, "reconfigure"):
         sys.stderr.reconfigure(errors="replace")
+    install_duplicate_provider_stderr_filter()
 
     args = ask_for_missing_inputs(parse_args(argv or sys.argv[1:]))
     check_ffmpeg()
@@ -925,13 +1341,20 @@ def main(argv: list[str] | None = None) -> int:
 
     while True:
         while True:
-            result = sync_playlist(
-                args.playlist_url,
-                Path(args.output) if args.output else None,
-                options,
-                stop_after_video_id=args.stop_after_video_id,
-                max_workers=args.workers,
-            )
+            if is_playlist_url(args.playlist_url):
+                result = sync_playlist(
+                    args.playlist_url,
+                    Path(args.output) if args.output else None,
+                    options,
+                    stop_after_video_id=args.stop_after_video_id,
+                    max_workers=args.workers,
+                )
+            else:
+                result = sync_single_track(
+                    args.playlist_url,
+                    Path(args.output) if args.output else None,
+                    options,
+                )
 
             if result == 0:
                 break
@@ -945,7 +1368,7 @@ def main(argv: list[str] | None = None) -> int:
             print("")
 
         print("")
-        if not ask_yes_no("Download another playlist?"):
+        if not ask_yes_no("Download another playlist or song?"):
             return result
 
         print("")
