@@ -297,6 +297,20 @@ def safe_manifest_filename(value: Any, suffix: str) -> str | None:
     return value
 
 
+def find_existing_playlist_folder(parent_dir: Path, playlist_id: str) -> Path | None:
+    """Find an existing immediate child folder owned by this playlist ID."""
+    if not parent_dir.is_dir():
+        return None
+    for manifest_path in sorted(parent_dir.glob(f"*/{MANIFEST_NAME}")):
+        try:
+            manifest = load_manifest(manifest_path)
+        except (OSError, ValueError, json.JSONDecodeError):
+            continue
+        if str(manifest.get("playlist_id") or "") == playlist_id:
+            return manifest_path.parent
+    return None
+
+
 def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
     """Normalize the small subset of ytmusicapi playlist data this script needs."""
     video_id = raw_track.get("videoId")
@@ -909,12 +923,18 @@ def sync_playlist(
     options: DownloadOptions,
     stop_after_video_id: str | None = None,
     max_workers: int | None = None,
+    output_is_parent: bool = False,
 ) -> int:
     playlist_id, playlist_title, total_items, tracks, skipped_items = fetch_playlist_tracks(playlist_url)
+    safe_playlist_title = sanitize_filename_part(playlist_title, "downloads")
 
     if output_dir is None:
-        safe_playlist_title = sanitize_filename_part(playlist_title, "downloads")
         output_dir = Path(__file__).resolve().parent / safe_playlist_title
+    elif output_is_parent:
+        output_dir = (
+            find_existing_playlist_folder(output_dir, playlist_id)
+            or output_dir / safe_playlist_title
+        )
 
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / MANIFEST_NAME
@@ -1152,6 +1172,7 @@ def choose_output_folder(dialog_title: str) -> str | None:
 def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
     """Prompt for required values when the script is launched by double-click."""
     launched_without_required_inputs = not args.playlist_url
+    args.output_is_parent = False
 
     if not launched_without_required_inputs:
         try:
@@ -1175,7 +1196,10 @@ def ask_for_missing_inputs(args: argparse.Namespace) -> argparse.Namespace:
 
     if not args.output:
         if is_playlist_url(args.playlist_url):
-            args.output = choose_output_folder("Choose where to save this playlist")
+            args.output = choose_output_folder(
+                "Choose where to create the playlist folder"
+            )
+            args.output_is_parent = True
         else:
             args.output = choose_output_folder(
                 "Choose the existing playlist folder for this song"
@@ -1312,11 +1336,15 @@ def ask_for_next_playlist(args: argparse.Namespace) -> argparse.Namespace:
             print(f"Invalid YouTube Music URL: {exc}")
 
     if is_playlist_url(args.playlist_url):
-        args.output = choose_output_folder("Choose where to save the next playlist")
+        args.output = choose_output_folder(
+            "Choose where to create the next playlist folder"
+        )
+        args.output_is_parent = True
     else:
         args.output = choose_output_folder(
             "Choose the existing playlist folder for this song"
         )
+        args.output_is_parent = False
     if not args.output:
         raise SystemExit(USER_CANCELLED_EXIT_CODE)
 
@@ -1348,6 +1376,7 @@ def main(argv: list[str] | None = None) -> int:
                     options,
                     stop_after_video_id=args.stop_after_video_id,
                     max_workers=args.workers,
+                    output_is_parent=args.output_is_parent,
                 )
             else:
                 result = sync_single_track(

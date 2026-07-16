@@ -22,8 +22,11 @@ class FolderPickerTests(unittest.TestCase):
         ):
             result = downloader.ask_for_missing_inputs(args)
 
-        folder_picker.assert_called_once_with("Choose where to save this playlist")
+        folder_picker.assert_called_once_with(
+            "Choose where to create the playlist folder"
+        )
         self.assertEqual(result.output, r"D:\Music\Selected Playlist")
+        self.assertTrue(result.output_is_parent)
 
     def test_command_line_url_does_not_open_folder_picker(self) -> None:
         args = downloader.parse_args([PLAYLIST_URL])
@@ -33,6 +36,7 @@ class FolderPickerTests(unittest.TestCase):
 
         folder_picker.assert_not_called()
         self.assertIsNone(result.output)
+        self.assertFalse(result.output_is_parent)
 
     def test_next_playlist_uses_folder_picker(self) -> None:
         args = downloader.parse_args([PLAYLIST_URL, "--output", r"D:\Music\Old"])
@@ -47,8 +51,11 @@ class FolderPickerTests(unittest.TestCase):
         ):
             result = downloader.ask_for_next_playlist(args)
 
-        folder_picker.assert_called_once_with("Choose where to save the next playlist")
+        folder_picker.assert_called_once_with(
+            "Choose where to create the next playlist folder"
+        )
         self.assertEqual(result.output, r"D:\Music\Next Playlist")
+        self.assertTrue(result.output_is_parent)
 
     def test_double_click_song_flow_requires_existing_playlist_folder(self) -> None:
         args = downloader.parse_args([])
@@ -67,6 +74,7 @@ class FolderPickerTests(unittest.TestCase):
             "Choose the existing playlist folder for this song"
         )
         self.assertEqual(result.output, r"D:\Music\Existing Playlist")
+        self.assertFalse(result.output_is_parent)
 
     def test_cancelling_playlist_folder_picker_ends_process(self) -> None:
         args = downloader.parse_args([])

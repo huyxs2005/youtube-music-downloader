@@ -113,11 +113,17 @@ https://music.youtube.com/playlist?list=PLAYLIST_ID
 ```
 
 After you enter the URL, a Windows folder-selection dialog opens. Select the
-folder that should contain the songs, manifest, and M3U8 playlist:
+parent location where the playlist folder should be created, for example:
 
 ```text
-D:\Music\My Playlist
+D:\Music
 ```
+
+The downloader reads the YouTube Music playlist title and automatically creates
+or reuses a folder such as `D:\Music\My Playlist`. That folder contains the
+songs, manifest, and M3U8 playlist. If the playlist title changes later, its
+manifest ID is used to reuse the original folder instead of redownloading into
+a duplicate folder.
 
 Closing or cancelling the folder dialog stops the downloader and closes its
 CMD window. The folder picker also appears when you choose to download another

@@ -23,6 +23,68 @@ def make_track(index: int, video_id: str, artist: str, title: str) -> downloader
 
 
 class PowerampM3U8Tests(unittest.TestCase):
+    def test_selected_parent_gets_playlist_title_subfolder(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent_dir = Path(temp_dir)
+            playlist_dir = parent_dir / "Road Trip _ Summer"
+
+            with (
+                patch.object(
+                    downloader,
+                    "fetch_playlist_tracks",
+                    return_value=("playlist-id", "Road Trip : Summer", 0, [], []),
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                result = downloader.sync_playlist(
+                    "https://music.youtube.com/playlist?list=playlist-id",
+                    parent_dir,
+                    downloader.DownloadOptions(),
+                    output_is_parent=True,
+                )
+
+            self.assertEqual(result, 0)
+            self.assertTrue((playlist_dir / downloader.MANIFEST_NAME).is_file())
+            self.assertTrue((playlist_dir / "Road Trip _ Summer.m3u8").is_file())
+            self.assertFalse((parent_dir / downloader.MANIFEST_NAME).exists())
+
+    def test_title_change_reuses_folder_with_matching_playlist_id(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            parent_dir = Path(temp_dir)
+            existing_dir = parent_dir / "Old Playlist Name"
+            existing_dir.mkdir()
+            downloader.save_manifest(
+                existing_dir / downloader.MANIFEST_NAME,
+                "playlist-id",
+                {},
+                "Old Playlist Name",
+                "Old Playlist Name.m3u8",
+            )
+            (existing_dir / "Old Playlist Name.m3u8").write_text(
+                "#EXTM3U\n",
+                encoding="utf-8",
+            )
+
+            with (
+                patch.object(
+                    downloader,
+                    "fetch_playlist_tracks",
+                    return_value=("playlist-id", "New Playlist Name", 0, [], []),
+                ),
+                redirect_stdout(StringIO()),
+            ):
+                result = downloader.sync_playlist(
+                    "https://music.youtube.com/playlist?list=playlist-id",
+                    parent_dir,
+                    downloader.DownloadOptions(),
+                    output_is_parent=True,
+                )
+
+            self.assertEqual(result, 0)
+            self.assertTrue((existing_dir / downloader.MANIFEST_NAME).is_file())
+            self.assertTrue((existing_dir / "New Playlist Name.m3u8").is_file())
+            self.assertFalse((parent_dir / "New Playlist Name").exists())
+
     def test_new_filenames_are_unicode_and_collision_resistant(self) -> None:
         first = downloader.build_filename(["宇多田ヒカル"], "花束を君に", "video-one")
         second = downloader.build_filename(["宇多田ヒカル"], "花束を君に", "video-two")
