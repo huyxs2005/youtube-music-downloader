@@ -87,7 +87,11 @@
         <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#301919"/></Trigger></Style.Triggers>
        </Style></DataGrid.RowStyle>
        <DataGrid.Columns>
-        <DataGridTemplateColumn Header="✓" Width="44" MinWidth="44" CanUserSort="False">
+        <DataGridTemplateColumn Width="44" MinWidth="44" CanUserSort="False">
+         <DataGridTemplateColumn.HeaderStyle><Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}"><Setter Property="Padding" Value="0"/></Style></DataGridTemplateColumn.HeaderStyle>
+         <DataGridTemplateColumn.Header>
+          <ui:Button x:Name="HeaderSelectionButton" Content="☐" Width="30" Height="28" MinWidth="0" MinHeight="0" Padding="0" FontSize="17" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Click="HeaderSelection_Click" ToolTip="Select all songs" AutomationProperties.Name="Select all songs" IsEnabled="False"/>
+         </DataGridTemplateColumn.Header>
          <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox Foreground="White" IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Download this song"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
         </DataGridTemplateColumn>
         <DataGridTextColumn Header="Position" Binding="{Binding Position}" SortMemberPath="Position" Width="88" MinWidth="88" IsReadOnly="True"/>

@@ -28,6 +28,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private int pendingTotal;
     private bool cookiesValid;
     private bool cookiesManuallyChosen;
+    private bool updatingSelection;
     private string? sortProperty;
     private ListSortDirection sortDirection = ListSortDirection.Ascending;
     private DataGridColumn? resizingColumn;
@@ -101,7 +102,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Counts.Text = showingDownloads
             ? $"{session.Count} in this download  ·  {completed} downloaded  ·  {failed} failed  ·  {ActiveView?.Cast<SongRow>().Count()} shown"
             : $"{songs.Count} songs  ·  {songs.Count(s => s.Status == "Downloaded")} downloaded  ·  {view.Cast<SongRow>().Count()} shown";
-        SelectionText.Text = showingDownloads ? $"{completed} of {session.Count} downloaded · {failed} failed" : $"{songs.Count(s => s.IsSelected)} of {songs.Count} songs selected";
+        int selectedCount = songs.Count(s => s.IsSelected);
+        bool allSelected = songs.Count > 0 && selectedCount == songs.Count;
+        HeaderSelectionButton.Content = allSelected ? "☑" : selectedCount > 0 ? "▣" : "☐";
+        HeaderSelectionButton.Appearance = allSelected ? Wpf.Ui.Controls.ControlAppearance.Primary : Wpf.Ui.Controls.ControlAppearance.Secondary;
+        HeaderSelectionButton.ToolTip = allSelected ? "Deselect all songs (including hidden songs)" : "Select all songs (including hidden songs)";
+        System.Windows.Automation.AutomationProperties.SetName(HeaderSelectionButton, allSelected ? "Deselect all songs" : "Select all songs");
+        HeaderSelectionButton.IsEnabled = !busy && songs.Count > 0;
+        SelectionText.Text = showingDownloads ? $"{completed} of {session.Count} downloaded · {failed} failed" : $"{selectedCount} of {songs.Count} songs selected";
         SelectionHint.Text = showingDownloads ? "Follow the current playlist here. Sorting changes the display only." : "Existing audio stays in the M3U8. Missing unchecked songs are skipped.";
         DownloadBadge.Text = session.Count == 0 ? "No active downloads" : busy ? $"{pending.Count} remaining" : $"{completed} downloaded · {failed} failed";
         bool noMatches = (showingDownloads ? session.Count : songs.Count) > 0 && ActiveView?.IsEmpty == true;
@@ -221,7 +229,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             case "log": StatusText.Text = element.GetProperty("message").GetString(); break;
         }
     }
-    private void SongChanged(object? sender, PropertyChangedEventArgs e) => UpdateCounts();
+    private void SongChanged(object? sender, PropertyChangedEventArgs e) { if (!updatingSelection) UpdateCounts(); }
     private void Log(string text)
     {
         // Keep long sessions responsive without growing an unbounded log.
@@ -236,6 +244,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Inputs.IsEnabled = !value;
         SetupButton.IsEnabled = !value;
         SelectAllButton.IsEnabled = ClearSelectionButton.IsEnabled = !value;
+        HeaderSelectionButton.IsEnabled = !value && songs.Count > 0;
         DownloadButton.IsEnabled = !value && snapshot.HasValue && cookiesValid;
         RetryButton.IsEnabled = !value && cookiesValid && songs.Any(s => s.Status == "Failed");
     }
@@ -266,8 +275,19 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         } catch (Exception ex) { StatusText.Text = ex.Message; }
         finally { SetBusy(false); view?.Refresh(); downloadView?.Refresh(); UpdateCounts(); }
     }
-    private void SelectAll_Click(object sender, RoutedEventArgs e) { if (!busy) foreach (var song in songs) song.IsSelected = true; }
-    private void Clear_Click(object sender, RoutedEventArgs e) { if (!busy) foreach (var song in songs) song.IsSelected = false; }
+    private void SetSelection(bool selected)
+    {
+        if (busy) return;
+        updatingSelection = true;
+        try { foreach (var song in songs) song.IsSelected = selected; }
+        finally { updatingSelection = false; UpdateCounts(); }
+    }
+    private void HeaderSelection_Click(object sender, RoutedEventArgs e)
+    {
+        if (!busy && songs.Count > 0) SetSelection(!songs.All(song => song.IsSelected));
+    }
+    private void SelectAll_Click(object sender, RoutedEventArgs e) => SetSelection(true);
+    private void Clear_Click(object sender, RoutedEventArgs e) => SetSelection(false);
     private async void Retry_Click(object sender, RoutedEventArgs e)
     {
         if (busy) return;

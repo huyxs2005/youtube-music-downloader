@@ -4,15 +4,15 @@ A Windows desktop app that downloads YouTube Music songs as OPUS audio and keeps
 
 ### 1. Download the Windows app
 
-**[Download YouTube Music Downloader v2.1.0 for Windows x64](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.1.0/YouTubeMusicDownloader-Desktop-v2.1.0-win-x64.zip)**
+**[Download YouTube Music Downloader v2.1.1 for Windows x64](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.1.1/YouTubeMusicDownloader-Desktop-v2.1.1-win-x64.zip)**
 
-You can also open the [Releases page](https://github.com/huyxs2005/youtube-music-downloader/releases/latest) and download **YouTubeMusicDownloader-Desktop-v2.1.0-win-x64.zip** from **Assets**.
+You can also open the [Releases page](https://github.com/huyxs2005/youtube-music-downloader/releases/latest) and download **YouTubeMusicDownloader-Desktop-v2.1.1-win-x64.zip** from **Assets**.
 
 Choose the desktop ZIP, not the automatically generated **Source code** downloads.
 
 The package includes the app, .NET runtime, Python download engine, FFmpeg, and FFprobe. **You do not need to install Python, .NET, Git, or FFmpeg separately. No CMD commands or BAT files are needed to open the app.**
 
-This package is for 64-bit Windows. The older v1.0 installer is the command-line edition; v2.1.0 is the WPF-UI desktop edition.
+This package is for 64-bit Windows. The older v1.0 installer is the command-line edition; v2.1.1 is the WPF-UI desktop edition.
 
 ### 2. Extract and open it
 
@@ -23,7 +23,7 @@ This package is for 64-bit Windows. The older v1.0 installer is the command-line
 
 **Keep the whole extracted folder together.** Do not move only the EXE, delete its supporting files, or run it from inside the ZIP. You can create a desktop shortcut to the EXE instead.
 
-The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.1.0/YouTubeMusicDownloader-Desktop-v2.1.0-win-x64.zip.sha256) is provided with the release.
+The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.1.1/YouTubeMusicDownloader-Desktop-v2.1.1-win-x64.zip.sha256) is provided with the release.
 
 ### 3. Add your cookies.txt file
 
@@ -108,6 +108,8 @@ Keep the audio, M3U8, and `playlist_manifest.json` together in the original play
 
 **Checkboxes control downloading. Existing songs stay in the M3U8 even when unchecked.**
 
+The button in the table's top-left corner selects all scanned songs. Click it again to deselect all. Its icon shows whether none, some, or all songs are selected. It includes songs hidden by your current filter and is disabled while downloading.
+
 Example: a playlist has 10 songs. The last 7 are already downloaded, and you select only the first 3. The app downloads those 3 and writes an M3U8 containing **all 10 in YouTube order**.
 
 Unchecked songs that are missing locally are not downloaded and get no broken entries. A sync with nothing selected still refreshes the M3U8 using existing audio.
@@ -184,7 +186,7 @@ Keep your existing music folders and manifests. You do not need to clone the rep
 To check the ZIP's checksum, open CMD in the folder containing your download and run:
 
 ```cmd
-certutil -hashfile YouTubeMusicDownloader-Desktop-v2.1.0-win-x64.zip SHA256
+certutil -hashfile YouTubeMusicDownloader-Desktop-v2.1.1-win-x64.zip SHA256
 ```
 
 Compare the result with the release's `.sha256` file.
@@ -217,7 +219,7 @@ Close the source-build app and run these commands from the project folder in CMD
 
 ```cmd
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-desktop.ps1" -Python ".\.venv\Scripts\python.exe"
-.venv\Scripts\python.exe installer\package-desktop.py dist\YouTubeMusicDownloader-Desktop --version 2.1.0
+.venv\Scripts\python.exe installer\package-desktop.py dist\YouTubeMusicDownloader-Desktop --version 2.1.1
 ```
 
 FFmpeg and FFprobe must be on `PATH`. Alternatively, add `-FfmpegDirectory "C:\ffmpeg\bin"` to the build command, using your actual FFmpeg folder. The ZIP and checksum are written to `dist\releases`. Packaging refuses cookie files and downloaded music.
