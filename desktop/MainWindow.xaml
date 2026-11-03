@@ -34,10 +34,10 @@
      <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
     <DockPanel Margin="0,0,0,12">
-     <ui:Button x:Name="SetupButton" DockPanel.Dock="Right" Content="Hide setup · expand list" Click="Setup_Click"/>
      <TextBlock x:Name="PageLabel" Text="PLAYLIST WORKSPACE" FontSize="12" Foreground="#FF6666" VerticalAlignment="Center"/>
     </DockPanel>
-    <Border x:Name="SetupPanel" Grid.Row="1" Style="{StaticResource Panel}" Margin="0,0,0,12">
+    <Expander x:Name="SetupSection" Grid.Row="1" Header="Playlist setup" IsExpanded="True" Margin="0,0,0,12">
+    <Border x:Name="SetupPanel" Style="{StaticResource Panel}" Margin="0,8,0,0">
      <Grid x:Name="Inputs">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
@@ -60,11 +60,11 @@
       </StackPanel>
      </Grid>
     </Border>
+    </Expander>
     <Grid Grid.Row="2" Margin="0,0,0,14">
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <StackPanel><TextBlock x:Name="PlaylistTitle" Text="Your song library" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
       <TextBlock x:Name="Counts" Text="Scan a playlist to see its songs here." Style="{StaticResource Muted}" Margin="0,5,0,0"/></StackPanel>
-     <Border Grid.Column="1" Background="#331111" CornerRadius="14" Padding="14,7" VerticalAlignment="Center"><TextBlock Text="↕  Display sorting only" Foreground="#FF6666" FontSize="12"/></Border>
     </Grid>
     <Grid Grid.Row="3" Margin="0,0,0,12">
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

@@ -81,8 +81,10 @@ internal static class Program
                 var grid = Field<Wpf.Ui.Controls.DataGrid>(window,"SongGrid");
                 Check(songs.Count == 3,"Scan should load all rows");
                 window.UpdateLayout();
-                Check(Field<System.Windows.Controls.Border>(window,"SetupPanel").Visibility==Visibility.Collapsed,"Scan should collapse setup to expand the song list");
-                Check(grid.ActualHeight>=350,"Song list should have room for many rows after scanning");
+                Check(!Field<Expander>(window,"SetupSection").IsExpanded,"Scan should collapse setup to expand the song list");
+                await Task.Delay(400); // Allow the setup section's collapse animation to finish.
+                window.UpdateLayout();
+                Check(grid.ActualHeight>=320,$"Song list should have room for many rows after scanning (height {grid.ActualHeight:0})");
                 Call(window,"ShowPage",true);
                 Check(Field<TextBlock>(window,"EmptyTitle").Text=="No downloads yet","Downloads tab should explain an empty queue");
                 Check(grid.Columns[4].Visibility==Visibility.Collapsed && grid.Columns[8].Visibility==Visibility.Visible,"Downloads should prioritize status over album metadata");

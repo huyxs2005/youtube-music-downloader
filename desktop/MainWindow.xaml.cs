@@ -21,7 +21,6 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private ListCollectionView? downloadView;
     private readonly HashSet<string> downloadSession = [];
     private bool showingDownloads;
-    private bool setupOpen = true;
     private JsonElement? snapshot;
     private bool busy;
     private readonly HashSet<string> pending = [];
@@ -66,12 +65,6 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     }
     private ListCollectionView? ActiveView => showingDownloads ? downloadView : view;
     private void Filter_Changed(object sender, RoutedEventArgs e) { view?.Refresh(); downloadView?.Refresh(); UpdateCounts(); }
-    private void Setup_Click(object sender, RoutedEventArgs e)
-    {
-        setupOpen = !setupOpen;
-        SetupPanel.Visibility = !showingDownloads && setupOpen ? Visibility.Visible : Visibility.Collapsed;
-        SetupButton.Content = setupOpen ? "Hide setup · expand list" : "Playlist setup";
-    }
     private void Playlists_Click(object sender, RoutedEventArgs e) => ShowPage(false);
     private void Downloads_Click(object sender, RoutedEventArgs e) => ShowPage(true);
     private void ShowPage(bool downloads)
@@ -81,8 +74,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         SongGrid.Columns[0].Visibility = downloads ? Visibility.Collapsed : Visibility.Visible;
         // Keep progress visible in a narrow Downloads view; metadata remains in Playlists.
         foreach (int index in new[] { 4, 5, 6 }) SongGrid.Columns[index].Visibility = downloads ? Visibility.Collapsed : Visibility.Visible;
-        SetupPanel.Visibility = !downloads && setupOpen ? Visibility.Visible : Visibility.Collapsed;
-        SetupButton.Visibility = downloads ? Visibility.Collapsed : Visibility.Visible;
+        SetupSection.Visibility = downloads ? Visibility.Collapsed : Visibility.Visible;
         SelectAllButton.Visibility = ClearSelectionButton.Visibility = downloads ? Visibility.Collapsed : Visibility.Visible;
         DownloadButton.Visibility = downloads ? Visibility.Collapsed : Visibility.Visible;
         BackToPlaylistButton.Visibility = downloads ? Visibility.Visible : Visibility.Collapsed;
@@ -198,8 +190,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                     songs.Add(song);
                 }
                 PlaylistTitle.Text = snapshot.Value.GetProperty("title").GetString();
-                setupOpen = false;
-                SetupButton.Content = "Playlist setup";
+                SetupSection.IsExpanded = false;
                 ShowPage(false);
                 SetSort("Position", ListSortDirection.Ascending);
                 string note = snapshot.Value.GetProperty("single").GetBoolean() ? " This song will be inserted at position 1." : "";
@@ -242,7 +233,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         busy = value;
         Tag = !value;
         Inputs.IsEnabled = !value;
-        SetupButton.IsEnabled = !value;
+        SetupSection.IsEnabled = !value;
         SelectAllButton.IsEnabled = ClearSelectionButton.IsEnabled = !value;
         HeaderSelectionButton.IsEnabled = !value && songs.Count > 0;
         DownloadButton.IsEnabled = !value && snapshot.HasValue && cookiesValid;
