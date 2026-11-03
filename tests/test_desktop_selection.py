@@ -139,6 +139,39 @@ class DesktopSelectionTests(unittest.TestCase):
     def test_unavailable_song_with_video_id_is_skipped(self):
         self.assertIsNone(engine.track_from_ytmusic({"videoId": "blocked", "title": "Unavailable", "isAvailable": False}, 1))
 
+    def test_complete_playlist_keeps_missing_references_repeated_songs_and_saved_order(self):
+        tracks = [track(1,"a"),track(2,"b"),track(3,"a"),track(4,"c")]
+        (self.folder / tracks[0].filename).write_bytes(b"existing")
+        prepared=("PL-test","My Playlist",4,tracks,[])
+        with contextlib.redirect_stdout(io.StringIO()), patch.object(engine,"download_track_job") as download:
+            code=engine.sync_playlist(self.url,self.folder,engine.DownloadOptions(),selected_video_ids=set(),prepared_playlist=prepared,include_missing=True)
+            self.assertEqual(code,0)
+            self.assertEqual(self.playlist_files(),[song.filename for song in tracks])
+            self.assertFalse((self.folder / tracks[1].filename).exists())
+            manifest=engine.load_manifest(self.folder / engine.MANIFEST_NAME)
+            self.assertEqual(manifest["youtube_order"],["a","b","a","c"])
+            self.assertTrue(manifest["include_missing"])
+            (self.folder / "My Playlist.m3u8").unlink()
+            recovered=engine.current_manifest_playlist_tracks(self.folder,manifest)
+            self.assertEqual([song.video_id for song in recovered],["a","b","a","c"])
+            engine.sync_playlist(self.url,self.folder,engine.DownloadOptions(),selected_video_ids=set(),prepared_playlist=prepared)
+            self.assertEqual(self.playlist_files(),[song.filename for song in tracks])
+            download.assert_not_called()
+
+    def test_repeated_song_downloads_once_but_keeps_both_playlist_positions(self):
+        tracks=[track(1,"a"),track(2,"a")]
+        def download(song,folder,options):
+            output=folder / "fixture.temp.opus"
+            output.write_bytes(b"downloaded fixture")
+            return song,output,None
+        with contextlib.redirect_stdout(io.StringIO()), patch.object(engine,"download_track_job",side_effect=download) as job, \
+             patch.object(engine,"apply_track_metadata",return_value=False):
+            result=engine.sync_playlist(self.url,self.folder,engine.DownloadOptions(),selected_video_ids={"a"},
+                prepared_playlist=("PL-test","My Playlist",2,tracks,[]),include_missing=True)
+        self.assertEqual(result,0)
+        self.assertEqual(job.call_count,1)
+        self.assertEqual(self.playlist_files(),[tracks[0].filename,tracks[0].filename])
+
     def test_backend_refuses_changed_playlist_folder(self):
         engine.save_manifest(self.folder / engine.MANIFEST_NAME, "other", {}, "Other")
         snapshot = dict(url=self.url, folder=str(self.folder), playlistId="PL-test",

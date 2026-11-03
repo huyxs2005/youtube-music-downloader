@@ -204,8 +204,14 @@ internal static class Program
                 songs.Single(s=>s.VideoId=="c").IsSelected=false;
                 await (Task)Call(window,"DownloadAsync")!;
                 Check(File.Exists(Path.Combine(temp,"Desktop verification.m3u8")),"JSON bridge should write M3U8");
+                var openFolder=Field<Wpf.Ui.Controls.Button>(window,"OpenDownloadFolderButton");
+                Check(openFolder.Visibility==Visibility.Visible && openFolder.IsEnabled,"Completed downloads should expose the folder button");
+                Check(Field<string>(window,"completedDownloadFolder")==Path.GetFullPath(temp),"The folder button should point to the actual playlist folder");
+                Call(window,"SetBusy",true);
+                Check(!openFolder.IsEnabled,"The completed-folder button should be disabled during a new download");
+                Call(window,"SetBusy",false);
                 string[] playlist = File.ReadAllLines(Path.Combine(temp,"Desktop verification.m3u8")).Where(l=>l.Length>0 && !l.StartsWith('#')).ToArray();
-                Check(playlist.SequenceEqual(new[]{"a.opus","b.opus"}),"Sorted display must not affect M3U8 order; missing unchecked excluded");
+                Check(playlist.SequenceEqual(new[]{"a.opus","b.opus","c.opus"}),"M3U8 should preserve the full order, including unchecked songs not yet downloaded");
                 Check(!File.Exists(Path.Combine(temp,"c.opus")),"Unchecked missing song must not download");
                 Check(songs.Single(s=>s.VideoId=="c").Status=="Not selected","Progress updates unchecked row");
                 Check(Field<bool>(window,"showingDownloads"),"Starting a download should open Downloads");
@@ -217,7 +223,7 @@ internal static class Program
                 Check(!grid.CanUserSortColumns && view.Cast<SongRow>().First().VideoId=="b","Custom order should start from the displayed arrangement and lock column sorting");
                 await (Task)Call(window,"DownloadAsync")!;
                 playlist=File.ReadAllLines(Path.Combine(temp,"Desktop verification.m3u8")).Where(l=>l.Length>0 && !l.StartsWith('#')).ToArray();
-                Check(playlist.SequenceEqual(new[]{"b.opus","a.opus"}),"Custom display order must reach the frozen engine and saved M3U8");
+                Check(playlist.SequenceEqual(new[]{"b.opus","a.opus","c.opus"}),"Custom display order, including undownloaded songs, must reach the saved M3U8");
                 Call(window,"ShowPage",false);
                 Field<CheckBox>(window,"CustomOrderToggle").IsChecked=false;
                 Check(grid.CanUserSortColumns && view.Cast<SongRow>().First().VideoId=="a","Disabling custom order should restore YouTube order and column sorting");

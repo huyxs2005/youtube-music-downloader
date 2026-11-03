@@ -28,7 +28,7 @@ from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
-APP_VERSION = "2.2.2"
+APP_VERSION = "2.2.3"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
 DOWNLOAD_ERRORS_NAME = "download_errors.log"
@@ -301,6 +301,8 @@ def save_manifest(
     m3u8_filename: str | None = None,
     *,
     custom_order: list[str] | None = None,
+    youtube_order: list[str] | None = None,
+    include_missing: bool | None = None,
 ) -> None:
     ordered_tracks = sorted(
         tracks_by_video_id.values(),
@@ -315,6 +317,11 @@ def save_manifest(
         data["custom_order"] = custom_order
     elif previous.get("playlist_id") == playlist_id and "custom_order" in previous:
         data["custom_order"] = previous["custom_order"]
+    for name, value in (("youtube_order", youtube_order), ("include_missing", include_missing)):
+        if value is not None:
+            data[name] = value
+        elif previous.get("playlist_id") == playlist_id and name in previous:
+            data[name] = previous[name]
     if playlist_title is not None:
         data["playlist_title"] = playlist_title
     if m3u8_filename is not None:
@@ -828,8 +835,10 @@ def write_poweramp_m3u8(
     tracks: list[Track],
     tracks_by_video_id: dict[str, dict[str, Any]],
     previous_filename: Any = None,
+    *,
+    include_missing: bool = False,
 ) -> tuple[Path, int]:
-    """Atomically write the current, existing-file-only Poweramp playlist."""
+    """Write playlist references in order, optionally retaining not-yet-downloaded songs."""
     m3u8_filename = build_m3u8_filename(playlist_title)
     m3u8_path = output_dir / m3u8_filename
     lines = ["#EXTM3U"]
@@ -838,7 +847,7 @@ def write_poweramp_m3u8(
     for track in tracks:
         entry = tracks_by_video_id.get(track.video_id, {})
         output_filename = safe_manifest_filename(entry.get("output_filename"), ".opus")
-        if not output_filename or not (output_dir / output_filename).is_file():
+        if not output_filename or (not include_missing and not (output_dir / output_filename).is_file()):
             continue
 
         artist_title = f"{artists_to_text(track.artists)} - {track.title}"
@@ -885,6 +894,9 @@ def current_manifest_playlist_tracks(
                     if entry:
                         ordered_entries.append(entry)
 
+    if not ordered_entries and manifest.get("youtube_order"):
+        by_id = manifest_by_video_id(manifest)
+        ordered_entries = [by_id[video_id] for video_id in manifest["youtube_order"] if video_id in by_id]
     if not ordered_entries:
         ordered_entries = sorted(
             (
@@ -906,6 +918,7 @@ def sync_single_track(
     song_url: str,
     output_dir: Path | None,
     options: DownloadOptions,
+    include_missing: bool | None = None,
 ) -> int:
     """Download one song into an existing playlist and insert it first."""
     if output_dir is None:
@@ -922,6 +935,7 @@ def sync_single_track(
         return 1
 
     manifest = load_manifest(manifest_path)
+    include_missing = bool(manifest.get("include_missing")) if include_missing is None else include_missing
     playlist_id = str(manifest.get("playlist_id") or "local-playlist")
     playlist_title = str(manifest.get("playlist_title") or output_dir.name)
     previous_m3u8_filename = manifest.get("m3u8_filename")
@@ -1007,6 +1021,7 @@ def sync_single_track(
         ordered_tracks,
         known_tracks,
         previous_m3u8_filename,
+        include_missing=include_missing,
     )
     save_manifest(
         manifest_path,
@@ -1014,6 +1029,8 @@ def sync_single_track(
         known_tracks,
         playlist_title,
         m3u8_path.name,
+        youtube_order=[item.video_id for item in ordered_tracks],
+        include_missing=include_missing,
     )
 
     print("")
@@ -1039,6 +1056,7 @@ def sync_playlist(
     on_track: Callable[[Track, str], None] | None = None,
     custom_order: list[str] | None = None,
     on_batch: Callable[[list[tuple[Track, str]]], None] | None = None,
+    include_missing: bool | None = None,
 ) -> int:
     playlist_id, playlist_title, total_items, tracks, skipped_items = (
         prepared_playlist if prepared_playlist is not None else fetch_playlist_tracks(playlist_url)
@@ -1056,6 +1074,7 @@ def sync_playlist(
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / MANIFEST_NAME
     manifest = load_manifest(manifest_path)
+    include_missing = bool(manifest.get("include_missing")) if include_missing is None else include_missing
     if manifest.get("playlist_id") not in (None, playlist_id):
         raise ValueError("This folder belongs to a different playlist. Choose its parent folder instead.")
     tracks = prepend_manual_tracks(manifest, tracks)
@@ -1082,6 +1101,7 @@ def sync_playlist(
     failed_count = 0
     failed_tracks: list[Track] = []
     pending_downloads: list[Track] = []
+    queued_video_ids: set[str] = set()
     initial_updates: list[tuple[Track, str]] = []
     failure_reasons: dict[str, str] = {}
     write_download_errors(output_dir, [])
@@ -1115,7 +1135,9 @@ def sync_playlist(
             elif selected_video_ids is not None and track.video_id not in selected_video_ids:
                 status = "Not selected"
             else:
-                pending_downloads.append(track)
+                if track.video_id not in queued_video_ids:
+                    pending_downloads.append(track)
+                    queued_video_ids.add(track.video_id)
                 status = "Queued"
             initial_updates.append((track, status))
             if on_track and on_batch is None:
@@ -1132,7 +1154,8 @@ def sync_playlist(
             break
 
     # Persist the prepared playlist once, rather than rewriting it for every unchecked row.
-    save_manifest(manifest_path, playlist_id, known_tracks, playlist_title, previous_m3u8_filename)
+    save_manifest(manifest_path, playlist_id, known_tracks, playlist_title, previous_m3u8_filename,
+        youtube_order=[track.video_id for track in tracks], include_missing=include_missing)
     if on_batch:
         on_batch(initial_updates)
     print(f"Prepared {len(pending_downloads)} downloads; reused {skipped_count} existing files; skipped {sum(status == 'Not selected' for _, status in initial_updates)} unchecked songs.")
@@ -1208,6 +1231,7 @@ def sync_playlist(
         playlist_tracks,
         known_tracks,
         previous_m3u8_filename,
+        include_missing=include_missing,
     )
     save_manifest(
         manifest_path,
@@ -1216,6 +1240,8 @@ def sync_playlist(
         playlist_title,
         m3u8_path.name,
         custom_order=custom_order or [],
+        youtube_order=[track.video_id for track in tracks],
+        include_missing=include_missing,
     )
 
     print("")

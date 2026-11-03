@@ -134,12 +134,13 @@
      </Grid>
     </Border>
     <Grid Grid.Row="5" Margin="0,16,0,10">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <StackPanel VerticalAlignment="Center"><TextBlock x:Name="SelectionText" Text="0 songs selected" FontWeight="SemiBold"/>
-      <TextBlock x:Name="SelectionHint" Text="Existing audio stays in the M3U8. Missing unchecked songs are skipped." FontSize="11" TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,4,0,0"/></StackPanel>
+      <TextBlock x:Name="SelectionHint" Text="Unchecked songs are not downloaded. The M3U8 keeps the complete playlist order." FontSize="11" TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,4,0,0"/></StackPanel>
      <ui:Button x:Name="RetryButton" Grid.Column="1" Content="Retry failed" Click="Retry_Click" Margin="12,0,8,0" IsEnabled="False"/>
-     <ui:Button x:Name="DownloadButton" Grid.Column="2" Content="Download selected &amp; sync" Foreground="White" Appearance="Primary" Click="Download_Click" IsEnabled="False" Padding="20,12"/>
-     <ui:Button x:Name="BackToPlaylistButton" Grid.Column="2" Content="Back to playlist" Click="Playlists_Click" Visibility="Collapsed" Padding="20,12"/>
+     <ui:Button x:Name="OpenDownloadFolderButton" Grid.Column="2" Content="Open download folder" Click="OpenDownloadFolder_Click" Visibility="Collapsed" Margin="0,0,8,0"/>
+     <ui:Button x:Name="DownloadButton" Grid.Column="3" Content="Download selected" Foreground="White" Appearance="Primary" Click="Download_Click" IsEnabled="False" Padding="20,12"/>
+     <ui:Button x:Name="BackToPlaylistButton" Grid.Column="3" Content="Back to playlist" Click="Playlists_Click" Visibility="Collapsed" Padding="20,12"/>
     </Grid>
     <StackPanel Grid.Row="6">
      <ProgressBar x:Name="Progress" Height="4" Minimum="0" Maximum="100" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>

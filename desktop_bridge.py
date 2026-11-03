@@ -163,7 +163,7 @@ def download(request: dict) -> None:
             return
         if missing_selected:
             progress(tracks[0], "Downloading")
-        code = engine.sync_single_track(url, folder, options)
+        code = engine.sync_single_track(url, folder, options, include_missing=request.get("includeMissing"))
         progress(tracks[0], "Downloaded" if (folder / tracks[0].filename).is_file() else "Failed")
     else:
         if engine.parse_playlist_id(url) != snapshot["playlistId"]:
@@ -171,8 +171,9 @@ def download(request: dict) -> None:
         code = engine.sync_playlist(url, folder, options,
             selected_video_ids=selected,
             prepared_playlist=(snapshot["playlistId"], snapshot["title"], snapshot["total"], tracks, snapshot["skipped"]),
-            on_track=progress, custom_order=request.get("customOrder"), on_batch=batch)
-    emit("done", result=code, message="Sync complete." if code == 0 else "Sync finished with failed songs. Select Retry failed to try again.")
+            on_track=progress, custom_order=request.get("customOrder"), on_batch=batch,
+            include_missing=request.get("includeMissing"))
+    emit("done", result=code, message="Download completed." if code == 0 else "Download finished with failed songs. Select Retry failed to try again.")
 
 
 def main() -> int:

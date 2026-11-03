@@ -8,8 +8,8 @@ using System.Reflection;
 using System.Windows.Forms;
 
 [assembly: AssemblyTitle("YouTube Music Downloader Extractor")]
-[assembly: AssemblyVersion("2.2.2.0")]
-[assembly: AssemblyFileVersion("2.2.2.0")]
+[assembly: AssemblyVersion("2.2.3.0")]
+[assembly: AssemblyFileVersion("2.2.3.0")]
 
 internal static class DesktopExtractor
 {

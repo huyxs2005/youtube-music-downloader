@@ -45,6 +45,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private bool loadingOrder;
     private bool sidebarExpanded = true;
     private CancellationTokenSource? previewCancellation;
+    private string? completedDownloadFolder;
     private List<SongRow>? selectionSweepRows;
     private Dictionary<SongRow, bool>? selectionSweepOriginal;
     private int selectionSweepAnchor;
@@ -169,8 +170,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         HeaderSelectionButton.IsEnabled = !busy && songs.Count > 0;
         SelectionText.Text = showingDownloads ? $"{completed} of {session.Count} downloaded · {failed} failed" : $"{selectedCount} of {songs.Count} songs selected";
         SelectionHint.Text = CustomOrderToggle.IsChecked == true
-            ? "Drag songs to arrange them. Download & sync saves this order to the M3U8; existing audio stays included."
-            : "Existing audio stays in the M3U8 in YouTube order. Missing unchecked songs are skipped.";
+            ? "Drag songs to arrange them. Download selected saves the complete order to the M3U8."
+            : "Unchecked songs are not downloaded. The M3U8 keeps the complete YouTube playlist order.";
         DownloadBadge.Text = session.Count == 0 ? "No active downloads" : busy ? $"{pending.Count} remaining" : $"{completed} downloaded · {failed} failed";
         bool noMatches = (showingDownloads ? session.Count : songs.Count) > 0 && ActiveView?.IsEmpty == true;
         EmptyState.Visibility = ActiveView?.IsEmpty == true ? Visibility.Visible : Visibility.Collapsed;
@@ -311,6 +312,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 StatusText.Text = $"Scanning… {detected:N0} songs detected · {unavailable:N0} unavailable items{checking}";
                 break;
             case "scan":
+                completedDownloadFolder = null;
+                OpenDownloadFolderButton.Visibility = Visibility.Collapsed;
                 snapshot = element.GetProperty("snapshot").Clone();
                 CheckCookies();
                 foreach (var song in songs) song.PropertyChanged -= SongChanged;
@@ -343,6 +346,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 StatusText.Text = $"Scan complete. {snapshot.Value.GetProperty("skipped").GetArrayLength()} unavailable items skipped. Choose the songs to download.{note}";
                 Progress.Value = 0;
                 UpdateCounts();
+                if (songs.Any(song => song.Status == "Downloaded"))
+                    ShowCompletedDownloadFolder(snapshot.Value.GetProperty("folder").GetString()!);
                 break;
             case "track_progress":
                 if (songLookup.TryGetValue(element.GetProperty("videoId").GetString()!, out var progressing))
@@ -414,6 +419,31 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         HeaderSelectionButton.IsEnabled = !value && songs.Count > 0;
         DownloadButton.IsEnabled = !value && snapshot.HasValue && cookiesValid;
         RetryButton.IsEnabled = !value && cookiesValid && songs.Any(s => s.Status == "Failed");
+        OpenDownloadFolderButton.IsEnabled = !value && completedDownloadFolder != null && Directory.Exists(completedDownloadFolder);
+    }
+    private void ShowCompletedDownloadFolder(string folder)
+    {
+        if (!Directory.Exists(folder)) return;
+        completedDownloadFolder = Path.GetFullPath(folder);
+        OpenDownloadFolderButton.ToolTip = completedDownloadFolder;
+        OpenDownloadFolderButton.Visibility = Visibility.Visible;
+        OpenDownloadFolderButton.IsEnabled = !busy;
+    }
+    private void OpenDownloadFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (busy || completedDownloadFolder == null) return;
+        if (!Directory.Exists(completedDownloadFolder)) {
+            OpenDownloadFolderButton.IsEnabled = false;
+            StatusText.Text = "The download folder has been moved or deleted.";
+            return;
+        }
+        try {
+            var start = new ProcessStartInfo("explorer.exe") { UseShellExecute = true };
+            start.ArgumentList.Add(completedDownloadFolder);
+            Process.Start(start)?.Dispose();
+        } catch (Exception error) when (error is System.ComponentModel.Win32Exception or IOException or InvalidOperationException) {
+            StatusText.Text = "Could not open the download folder: " + error.Message;
+        }
     }
     private async void Download_Click(object sender, RoutedEventArgs e) => await DownloadAsync();
     private async Task DownloadAsync()
@@ -425,6 +455,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         if (!CheckCookies()) { StatusText.Text = CookieStatus.Text; return; }
         metadataCancellation?.Cancel();
         string cookies = CookiesInput.Text;
+        string downloadFolder = snapshot.Value.GetProperty("folder").GetString()!;
+        OpenDownloadFolderButton.Visibility = Visibility.Collapsed;
         string[] selected = songs.Where(song => song.IsSelected).Select(song => song.VideoId).Distinct().ToArray();
         downloadSession.Clear();
         foreach (string id in selected) downloadSession.Add(id);
@@ -437,13 +469,16 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         StatusFilter.SelectedIndex = 0;
         ShowPage(true);
         Progress.Value = 0;
-        StatusText.Text = selected.Length == 0 ? "Updating the playlist using existing audio…" : "Downloading selected songs and syncing the playlist…";
+        StatusText.Text = selected.Length == 0 ? "Saving the complete playlist order…" : "Downloading selected songs and updating the playlist…";
         try {
             string[]? customOrder = CustomOrderToggle.IsChecked == true
                 ? songs.OrderBy(song => song.CustomPosition).Select(song => song.VideoId).ToArray() : null;
-            await backend.RunAsync(new { action = "download", snapshot = snapshot.Value, selected, cookies, customOrder }, HandleEvent, Log);
+            await backend.RunAsync(new { action = "download", snapshot = snapshot.Value, selected, cookies, customOrder, includeMissing = true }, HandleEvent, Log);
         } catch (Exception ex) { StatusText.Text = ex.Message; }
-        finally { SetBusy(false); view?.Refresh(); downloadView?.Refresh(); UpdateCounts(); }
+        finally {
+            SetBusy(false); view?.Refresh(); downloadView?.Refresh(); UpdateCounts();
+            ShowCompletedDownloadFolder(downloadFolder);
+        }
     }
     private void SetSelection(bool selected)
     {
@@ -774,6 +809,6 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         if (!busy) metadataCancellation?.Cancel();
         if (!busy) return;
         e.Cancel = true;
-        StatusText.Text = "Please wait for the current scan or sync to finish before closing.";
+        StatusText.Text = "Please wait for the current scan or download to finish before closing.";
     }
 }
