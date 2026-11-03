@@ -28,7 +28,7 @@ from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
-APP_VERSION = "2.2.3"
+APP_VERSION = "2.2.4"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
 DOWNLOAD_ERRORS_NAME = "download_errors.log"
@@ -303,6 +303,7 @@ def save_manifest(
     custom_order: list[str] | None = None,
     youtube_order: list[str] | None = None,
     include_missing: bool | None = None,
+    legacy_filenames: list[str] | None = None,
 ) -> None:
     ordered_tracks = sorted(
         tracks_by_video_id.values(),
@@ -317,7 +318,7 @@ def save_manifest(
         data["custom_order"] = custom_order
     elif previous.get("playlist_id") == playlist_id and "custom_order" in previous:
         data["custom_order"] = previous["custom_order"]
-    for name, value in (("youtube_order", youtube_order), ("include_missing", include_missing)):
+    for name, value in (("youtube_order", youtube_order), ("include_missing", include_missing), ("legacy_filenames", legacy_filenames)):
         if value is not None:
             data[name] = value
         elif previous.get("playlist_id") == playlist_id and name in previous:
@@ -355,8 +356,7 @@ def best_thumbnail_url(thumbnails: list[dict[str, Any]]) -> str | None:
 def build_filename(artists: list[str], title: str, video_id: str) -> str:
     artist_text = sanitize_filename_part(artists_to_text(artists), "Unknown Artist")
     title_text = sanitize_filename_part(title, "Untitled")
-    video_id_text = sanitize_filename_part(video_id, "video")
-    return f"{artist_text} - {title_text} [{video_id_text}].opus"
+    return f"{artist_text} - {title_text}.opus"
 
 
 def build_m3u8_filename(playlist_title: str) -> str:
@@ -919,6 +919,7 @@ def sync_single_track(
     output_dir: Path | None,
     options: DownloadOptions,
     include_missing: bool | None = None,
+    legacy_filenames: list[str] | None = None,
 ) -> int:
     """Download one song into an existing playlist and insert it first."""
     if output_dir is None:
@@ -955,6 +956,9 @@ def sync_single_track(
         for existing_track in current_tracks
         if existing_track.video_id != track.video_id
     ]
+    from filename_migration import assign_filenames
+    legacy_filenames = manifest.get("legacy_filenames", []) if legacy_filenames is None else legacy_filenames
+    renamed = assign_filenames(ordered_tracks, output_dir, known_tracks, legacy_filenames, migrate=True)
     for index, ordered_track in enumerate(ordered_tracks, start=1):
         ordered_track.index = index
         existing_entry = known_tracks.get(ordered_track.video_id, {})
@@ -973,7 +977,10 @@ def sync_single_track(
         known_tracks,
         playlist_title,
         previous_m3u8_filename,
+        legacy_filenames=legacy_filenames,
     )
+    if renamed:
+        write_poweramp_m3u8(output_dir, playlist_title, ordered_tracks, known_tracks, previous_m3u8_filename, include_missing=include_missing)
 
     final_path = output_dir / track.filename
     download_failed = False
@@ -1057,6 +1064,7 @@ def sync_playlist(
     custom_order: list[str] | None = None,
     on_batch: Callable[[list[tuple[Track, str]]], None] | None = None,
     include_missing: bool | None = None,
+    legacy_filenames: list[str] | None = None,
 ) -> int:
     playlist_id, playlist_title, total_items, tracks, skipped_items = (
         prepared_playlist if prepared_playlist is not None else fetch_playlist_tracks(playlist_url)
@@ -1093,6 +1101,9 @@ def sync_playlist(
         print(f"Skipping playlist item {item_index:03d}: no videoId found")
 
     known_tracks = manifest_by_video_id(manifest)
+    from filename_migration import assign_filenames
+    legacy_filenames = manifest.get("legacy_filenames", []) if legacy_filenames is None else legacy_filenames
+    renamed = assign_filenames(tracks, output_dir, known_tracks, legacy_filenames, migrate=True)
     previous_m3u8_filename = manifest.get("m3u8_filename")
     success_count = 0
     skipped_count = 0
@@ -1116,15 +1127,6 @@ def sync_playlist(
 
     for track in tracks:
         old_entry = known_tracks.get(track.video_id)
-        old_filename = safe_manifest_filename(
-            old_entry.get("output_filename") if old_entry else None,
-            ".opus",
-        )
-        if old_filename:
-            # The manifest owns this name permanently. Playlist reordering and
-            # metadata changes must never rename an existing audio file.
-            track.filename = old_filename
-
         final_path = output_dir / track.filename
         manually_added = bool(old_entry and old_entry.get("manually_added"))
         known_tracks[track.video_id] = manifest_entry(track, manually_added)
@@ -1155,7 +1157,13 @@ def sync_playlist(
 
     # Persist the prepared playlist once, rather than rewriting it for every unchecked row.
     save_manifest(manifest_path, playlist_id, known_tracks, playlist_title, previous_m3u8_filename,
-        youtube_order=[track.video_id for track in tracks], include_missing=include_missing)
+        youtube_order=[track.video_id for track in tracks], include_missing=include_missing, legacy_filenames=legacy_filenames)
+    if renamed:
+        ordered = tracks
+        if custom_order is not None:
+            ranks = {video_id: rank for rank, video_id in enumerate(custom_order)}
+            ordered = sorted(tracks, key=lambda item: (ranks.get(item.video_id, len(ranks)), item.index))
+        write_poweramp_m3u8(output_dir, playlist_title, ordered, known_tracks, previous_m3u8_filename, include_missing=include_missing)
     if on_batch:
         on_batch(initial_updates)
     print(f"Prepared {len(pending_downloads)} downloads; reused {skipped_count} existing files; skipped {sum(status == 'Not selected' for _, status in initial_updates)} unchecked songs.")

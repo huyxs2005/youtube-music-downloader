@@ -209,8 +209,12 @@ class SingleSongSyncTests(unittest.TestCase):
         self.assertEqual(result, 0)
         self.assertEqual(
             self.read_playlist_audio_lines(),
-            [manual.filename, "002 - Second.opus", "001 - First.opus"],
+            ["Artist - Local First.opus", "002 - Second.opus", "001 - First.opus"],
         )
+        self.assertEqual((self.output_dir / "Artist - Local First.opus").read_bytes(), b"manual audio")
+        self.assertFalse((self.output_dir / manual.filename).exists())
+        self.assertEqual(downloader.manifest_by_video_id(self.read_manifest())["manual"]["output_filename"],
+                         "Artist - Local First.opus")
 
 
 class UrlValidationTests(unittest.TestCase):

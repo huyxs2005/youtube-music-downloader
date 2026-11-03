@@ -4,15 +4,15 @@ A Windows desktop app for downloading YouTube and YouTube Music playlists as OPU
 
 ### 1. Download the Windows app
 
-**[Download YouTube Music Downloader v2.2.3 — Extract & open folder](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.3/YouTubeMusicDownloader-Desktop-v2.2.3-win-x64-extract.exe)**
+**[Download YouTube Music Downloader v2.2.4 — Extract & open folder](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.4/YouTubeMusicDownloader-Desktop-v2.2.4-win-x64-extract.exe)**
 
-Prefer a regular archive? Download the **[portable ZIP](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.3/YouTubeMusicDownloader-Desktop-v2.2.3-win-x64.zip)** instead. Both downloads contain the same app.
+Prefer a regular archive? Download the **[portable ZIP](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.4/YouTubeMusicDownloader-Desktop-v2.2.4-win-x64.zip)** instead. Both downloads contain the same app.
 
 Choose a Windows app download from [Releases](https://github.com/huyxs2005/youtube-music-downloader/releases/latest), not the automatically generated **Source code** downloads.
 
 The package includes the app, .NET runtime, Python download engine, FFmpeg, and FFprobe. **You do not need to install Python, .NET, Git, or FFmpeg separately. No CMD commands or BAT files are needed to open the app.**
 
-This package is for 64-bit Windows. The older v1.0 installer is the command-line edition; v2.2.3 is the WPF-UI desktop edition.
+This package is for 64-bit Windows. The older v1.0 installer is the command-line edition; v2.2.4 is the WPF-UI desktop edition.
 
 ### 2. Extract and open it
 
@@ -21,7 +21,7 @@ This package is for 64-bit Windows. The older v1.0 installer is the command-line
 3. Press **Extract**. When it finishes, the inner **YouTubeMusicDownloader-Desktop** folder opens automatically.
 4. Double-click **YouTubeMusicDownloader.Desktop.exe** inside that folder.
 
-For example, choosing `D:\` extracts to `D:\YouTubeMusicDownloader-Desktop-v2.2.3-win-x64\YouTubeMusicDownloader-Desktop` and opens that inner folder directly. The extractor does not start the app automatically.
+For example, choosing `D:\` extracts to `D:\YouTubeMusicDownloader-Desktop-v2.2.4-win-x64\YouTubeMusicDownloader-Desktop` and opens that inner folder directly. The extractor does not start the app automatically.
 
 **Using the ZIP instead:** right-click it, choose **Extract All**, then open **YouTubeMusicDownloader-Desktop** inside the destination. Windows decides which folder opens after ZIP extraction; the optional extractor above opens the inner app folder for you.
 
@@ -37,7 +37,7 @@ YouTubeMusicDownloader-Desktop/
 
 Keep the `app` subfolder beside the EXE. The root EXE is a small launcher using the .NET Framework included with supported Windows versions. The app's own runtime, download engine, tools, licenses, and this guide stay inside `app`. Your private `cookies.txt` can stay beside the launcher.
 
-The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.3/YouTubeMusicDownloader-Desktop-v2.2.3-win-x64.zip.sha256) is provided with the release.
+The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.4/YouTubeMusicDownloader-Desktop-v2.2.4-win-x64.zip.sha256) is provided with the release.
 
 ### 3. Add your cookies.txt file
 
@@ -124,7 +124,7 @@ Large playlists prepare their manifest and initial statuses in batches. Unchecke
 
 ### Updating a playlist
 
-For a new playlist, the app creates a subfolder using its title. Later downloads find the same playlist by its saved YouTube ID, even if the title changes. Existing audio is reused and filenames stay the same. **Retry failed** selects and retries failed songs.
+For a new playlist, the app creates a subfolder using its title. Later downloads find the same playlist by its saved YouTube ID, even if the title changes. Existing audio is reused. Filenames use `Artist - Title.opus`; YouTube IDs stay inside the manifest. The first download with v2.2.4 removes older ID suffixes from local filenames and updates the playlist references together, without re-encoding audio. Different videos with the same name get `(2)`, `(3)`, and so on rather than overwriting each other. **Retry failed** selects and retries failed songs.
 
 Keep the audio, M3U8, and `playlist_manifest.json` together in the original playlist folder so the app can recognize existing songs.
 
@@ -185,7 +185,9 @@ My Playlist\
 - **Manifest:** the playlist ID and permanent filename mappings. Keep it for future updates.
 - **Failure reports:** songs that need another attempt. Reports are cleared after a successful retry.
 
-To update a phone, copy the new audio into its existing playlist folder and replace the old M3U8. Keep the M3U8 beside the audio. In Poweramp, open it under **Library > Playlists** and turn shuffle off for playlist order.
+To reuse filenames from an older phone playlist, choose **Open M3U8**, select that old playlist without a companion manifest, then paste its YouTube URL and scan. The app reuses matching filenames and remembers them for later updates. It only matches the same artist and title, allowing punctuation and accent differences; it does not guess between different recordings or versions.
+
+To update a phone, copy the new audio into its existing playlist folder and replace the old M3U8. If you previously copied files with ID brackets, copy the newly renamed audio too; replacing an M3U8 alone cannot rename files already on the phone. Keep the M3U8 beside the audio. In Poweramp, open it under **Library > Playlists** and turn shuffle off for playlist order.
 
 ## Update to a newer release
 
@@ -209,13 +211,13 @@ Keep your existing music folders and manifests. You do not need to clone the rep
 | Container name already exists | Use `docker start bgutil-provider` instead of creating it again. |
 | Docker is unavailable | Open Docker Desktop, wait for its engine, and check `docker info`. |
 | Existing songs appear missing | Choose the original playlist folder and keep its audio and manifest together. |
-| Older releases fail with Docker server 2.x | Upgrade to v2.2.3 or later. The token-provider plugin must match the server's major version; v2.2.3 bundles plugin 2.0.2 and a JavaScript runtime for YouTube. |
+| Older releases fail with Docker server 2.x | Upgrade to v2.2.4 or later. The token-provider plugin must match the server's major version; v2.2.4 bundles plugin 2.0.2 and a JavaScript runtime for YouTube. |
 | Files cannot be written | Extract the app and choose a music folder in a writable location outside `Program Files`. |
 
 To check the ZIP's checksum, open CMD in the folder containing your download and run:
 
 ```cmd
-certutil -hashfile YouTubeMusicDownloader-Desktop-v2.2.3-win-x64.zip SHA256
+certutil -hashfile YouTubeMusicDownloader-Desktop-v2.2.4-win-x64.zip SHA256
 ```
 
 Compare the result with the release's `.sha256` file.
@@ -248,8 +250,8 @@ Close the source-build app and run these commands from the project folder in CMD
 
 ```cmd
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-desktop.ps1" -Python ".\.venv\Scripts\python.exe"
-.venv\Scripts\python.exe installer\package-desktop.py dist\YouTubeMusicDownloader-Desktop --version 2.2.3
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-extractor.ps1" -ArchivePath ".\dist\releases\YouTubeMusicDownloader-Desktop-v2.2.3-win-x64.zip"
+.venv\Scripts\python.exe installer\package-desktop.py dist\YouTubeMusicDownloader-Desktop --version 2.2.4
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-extractor.ps1" -ArchivePath ".\dist\releases\YouTubeMusicDownloader-Desktop-v2.2.4-win-x64.zip"
 ```
 
 FFmpeg and FFprobe must be on `PATH`. A shared FFmpeg build reduces the installed size; its DLLs are copied with the tools. Alternatively, add `-FfmpegDirectory "C:\ffmpeg\bin"` to the build command, using your actual FFmpeg folder. The ZIP and checksum are written to `dist\releases`. Packaging includes only the launcher and `app` subfolder; private cookies and downloaded playlist folders beside the EXE are excluded. It refuses private files inside `app`.

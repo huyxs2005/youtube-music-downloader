@@ -6,8 +6,8 @@ using System.Runtime.InteropServices;
 
 [assembly: AssemblyTitle("YouTube Music Downloader")]
 [assembly: AssemblyDescription("Launch YouTube Music Downloader")]
-[assembly: AssemblyVersion("2.2.3.0")]
-[assembly: AssemblyFileVersion("2.2.3.0")]
+[assembly: AssemblyVersion("2.2.4.0")]
+[assembly: AssemblyFileVersion("2.2.4.0")]
 
 internal static class DesktopLauncher
 {

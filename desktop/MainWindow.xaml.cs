@@ -46,6 +46,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private bool sidebarExpanded = true;
     private CancellationTokenSource? previewCancellation;
     private string? completedDownloadFolder;
+    private string? legacyPlaylistPath;
     private List<SongRow>? selectionSweepRows;
     private Dictionary<SongRow, bool>? selectionSweepOriginal;
     private int selectionSweepAnchor;
@@ -232,6 +233,14 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         var picker = new OpenFileDialog { Filter = "M3U8 playlists (*.m3u8)|*.m3u8" };
         if (picker.ShowDialog(this) != true) return;
+        string manifestPath = Path.Combine(Path.GetDirectoryName(picker.FileName)!, "playlist_manifest.json");
+        if (!File.Exists(manifestPath)) {
+            legacyPlaylistPath = picker.FileName;
+            InvalidateScan();
+            StatusText.Text = "Old playlist filenames selected. Paste its YouTube URL and scan to keep matching filenames. Audio on your phone stays untouched.";
+            return;
+        }
+        legacyPlaylistPath = null;
         try {
             string folder = Path.GetDirectoryName(picker.FileName)!;
             using var doc = JsonDocument.Parse(File.ReadAllText(Path.Combine(folder, "playlist_manifest.json")));
@@ -285,7 +294,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         Activity.Clear();
         string? fetchError = null;
         try {
-            await backend.RunAsync(new { action = "scan", url, folder = FolderInput.Text }, element => {
+            await backend.RunAsync(new { action = "scan", url, folder = FolderInput.Text, legacyPlaylist = legacyPlaylistPath }, element => {
                 if (element.GetProperty("type").GetString() == "error") fetchError = element.GetProperty("message").GetString();
                 else if (element.GetProperty("type").GetString() == "scan" &&
                     element.GetProperty("snapshot").GetProperty("rows").GetArrayLength() == 0)
@@ -312,6 +321,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 StatusText.Text = $"Scanning… {detected:N0} songs detected · {unavailable:N0} unavailable items{checking}";
                 break;
             case "scan":
+                legacyPlaylistPath = null;
                 completedDownloadFolder = null;
                 OpenDownloadFolderButton.Visibility = Visibility.Collapsed;
                 snapshot = element.GetProperty("snapshot").Clone();

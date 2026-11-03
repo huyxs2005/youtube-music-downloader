@@ -85,13 +85,9 @@ class PowerampM3U8Tests(unittest.TestCase):
             self.assertTrue((existing_dir / "New Playlist Name.m3u8").is_file())
             self.assertFalse((parent_dir / "New Playlist Name").exists())
 
-    def test_new_filenames_are_unicode_and_collision_resistant(self) -> None:
-        first = downloader.build_filename(["宇多田ヒカル"], "花束を君に", "video-one")
-        second = downloader.build_filename(["宇多田ヒカル"], "花束を君に", "video-two")
-
-        self.assertEqual(first, "宇多田ヒカル - 花束を君に [video-one].opus")
-        self.assertEqual(second, "宇多田ヒカル - 花束を君に [video-two].opus")
-        self.assertNotEqual(first, second)
+    def test_new_filenames_are_readable_unicode(self) -> None:
+        name = downloader.build_filename(["宇多田ヒカル"], "花束を君に", "video-one")
+        self.assertEqual(name, "宇多田ヒカル - 花束を君に.opus")
 
     def test_m3u8_uses_current_order_and_omits_missing_audio(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

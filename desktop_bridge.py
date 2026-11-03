@@ -13,6 +13,7 @@ from threading import Lock
 
 import ytmusic_downloader as engine
 import desktop_metadata
+import filename_migration
 
 _write_lock = Lock()
 _protocol = sys.stdout
@@ -118,11 +119,8 @@ def scan(request: dict) -> dict:
         manifest = engine.load_manifest(folder / engine.MANIFEST_NAME)
         tracks = engine.prepend_manual_tracks(manifest, tracks)
     known = engine.manifest_by_video_id(manifest)
-    for track in tracks:
-        entry = known.get(track.video_id, {})
-        filename = engine.safe_manifest_filename(entry.get("output_filename"), ".opus")
-        if filename:
-            track.filename = filename
+    legacy_names = filename_migration.read_legacy_playlist(request["legacyPlaylist"]) if request.get("legacyPlaylist") else manifest.get("legacy_filenames", [])
+    filename_migration.assign_filenames(tracks, folder, known, legacy_names)
     rows = []
     for checked, track in enumerate(tracks, start=1):
         rows.append(row(track, folder))
@@ -130,6 +128,7 @@ def scan(request: dict) -> dict:
     return dict(url=url, folder=str(folder), playlistId=playlist_id, title=title,
                 single=single, total=total, skipped=skipped,
                 customOrder=list(dict.fromkeys(manifest.get("custom_order") or [])),
+                legacyFilenames=legacy_names,
                 tracks=[asdict(track) for track in tracks], rows=rows)
 
 
@@ -163,7 +162,11 @@ def download(request: dict) -> None:
             return
         if missing_selected:
             progress(tracks[0], "Downloading")
-        code = engine.sync_single_track(url, folder, options, include_missing=request.get("includeMissing"))
+        code = engine.sync_single_track(url, folder, options, include_missing=request.get("includeMissing"), legacy_filenames=snapshot.get("legacyFilenames"))
+        updated = engine.manifest_by_video_id(engine.load_manifest(folder / engine.MANIFEST_NAME))
+        filename = engine.safe_manifest_filename(updated.get(tracks[0].video_id, {}).get("output_filename"), ".opus")
+        if filename:
+            tracks[0].filename = filename
         progress(tracks[0], "Downloaded" if (folder / tracks[0].filename).is_file() else "Failed")
     else:
         if engine.parse_playlist_id(url) != snapshot["playlistId"]:
@@ -172,7 +175,7 @@ def download(request: dict) -> None:
             selected_video_ids=selected,
             prepared_playlist=(snapshot["playlistId"], snapshot["title"], snapshot["total"], tracks, snapshot["skipped"]),
             on_track=progress, custom_order=request.get("customOrder"), on_batch=batch,
-            include_missing=request.get("includeMissing"))
+            include_missing=request.get("includeMissing"), legacy_filenames=snapshot.get("legacyFilenames"))
     emit("done", result=code, message="Download completed." if code == 0 else "Download finished with failed songs. Select Retry failed to try again.")
 
 
