@@ -9,24 +9,23 @@
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
   <ui:TitleBar Title="YouTube Music Downloader"><ui:TitleBar.Icon><ui:ImageIcon Source="Assets/app-icon.png"/></ui:TitleBar.Icon></ui:TitleBar>
   <Grid Grid.Row="1">
-   <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-   <Border Background="#0F0F0F" BorderBrush="#282828" BorderThickness="0,0,1,0" Padding="20,26">
-    <DockPanel>
+   <Grid.ColumnDefinitions><ColumnDefinition x:Name="SidebarColumn" Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+   <Border x:Name="Sidebar" Width="190" Background="#0F0F0F" BorderBrush="#282828" BorderThickness="0,0,1,0" ClipToBounds="True">
+    <Grid>
+     <ui:Button x:Name="SidebarToggle" Content="☰" Appearance="Primary" Foreground="White" FontSize="16" Width="34" Height="32" MinWidth="0" MinHeight="0" Padding="0" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="20,18,0,0" Click="SidebarToggle_Click" ToolTip="Hide sidebar" AutomationProperties.Name="Hide sidebar"/>
+    <DockPanel x:Name="SidebarContent" Width="150" HorizontalAlignment="Left" Margin="20,76,0,26">
+     <DockPanel.RenderTransform><TranslateTransform x:Name="SidebarContentOffset"/></DockPanel.RenderTransform>
      <StackPanel DockPanel.Dock="Bottom">
       <TextBlock Text="YOUR MUSIC. YOUR ORDER." FontSize="10" Foreground="#FF6666" Margin="0,0,0,8"/>
-      <TextBlock Text="OPUS audio · UTF-8 M3U8" FontSize="11" Style="{StaticResource Muted}"/>
+      <TextBlock Text="Sort your view.&#10;Keep your playlist order." FontSize="11" LineHeight="20" Style="{StaticResource Muted}"/>
      </StackPanel>
      <StackPanel>
-      <StackPanel Orientation="Horizontal" Margin="0,0,0,28"><Image Source="Assets/app-icon.png" Width="30" Height="30" Margin="0,0,8,0"/><TextBlock Text="music sync" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
       <ui:Button x:Name="PlaylistNav" Content="▤   Playlists" Click="Playlists_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Foreground="White" Appearance="Primary" Padding="14,12"/>
       <ui:Button x:Name="DownloadsNav" Content="↓   Downloads" Foreground="White" Click="Downloads_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,12" Margin="0,8,0,0"/>
       <TextBlock x:Name="DownloadBadge" Text="No active downloads" Margin="12,10,0,0" FontSize="11" TextWrapping="Wrap" Style="{StaticResource Muted}"/>
-      <TextBlock Text="01   Connect playlist" Margin="12,28,0,12" Style="{StaticResource Muted}"/>
-      <TextBlock Text="02   Review songs" Margin="12,0,0,12" Style="{StaticResource Muted}"/>
-      <TextBlock Text="03   Download &amp; sync" Margin="12,0,0,20" Style="{StaticResource Muted}"/>
-      <TextBlock Text="Sort your view.&#10;Keep your playlist order." Margin="12,20,0,0" FontSize="12" LineHeight="22" Style="{StaticResource Muted}"/>
      </StackPanel>
     </DockPanel>
+    </Grid>
    </Border>
    <Grid x:Name="Workspace" Grid.Column="1" Margin="24,18,24,16">
     <Grid.RowDefinitions>
@@ -34,11 +33,10 @@
      <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
     <DockPanel Margin="0,0,0,12">
-     <TextBlock x:Name="PageLabel" Text="PLAYLIST WORKSPACE" FontSize="12" Foreground="#FF6666" VerticalAlignment="Center"/>
+     <TextBlock x:Name="PageLabel" Text="Playlist" FontSize="12" Foreground="#FF6666" VerticalAlignment="Center"/>
     </DockPanel>
     <Expander x:Name="SetupSection" Grid.Row="1" Header="Playlist setup" IsExpanded="True" Margin="0,0,0,12">
-    <Border x:Name="SetupPanel" Style="{StaticResource Panel}" Margin="0,8,0,0">
-     <Grid x:Name="Inputs">
+     <Grid x:Name="Inputs" Margin="0,8,0,0">
       <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <TextBlock Text="YouTube Music playlist or song URL" Margin="0,0,0,8"/>
@@ -59,7 +57,6 @@
        <TextBlock x:Name="CookieStatus" Text="Cookies required for downloading." FontSize="11" TextWrapping="Wrap" Margin="0,6,0,0"/>
       </StackPanel>
      </Grid>
-    </Border>
     </Expander>
     <Grid Grid.Row="2" Margin="0,0,0,14">
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -67,22 +64,39 @@
       <TextBlock x:Name="Counts" Text="Scan a playlist to see its songs here." Style="{StaticResource Muted}" Margin="0,5,0,0"/></StackPanel>
     </Grid>
     <Grid Grid.Row="3" Margin="0,0,0,12">
-     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-     <ui:TextBox x:Name="SearchInput" PlaceholderText="Search title, artist, album or genre…" TextChanged="Filter_Changed" Margin="0,0,12,0"/>
+     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+     <ui:TextBox x:Name="SearchInput" PlaceholderText="Search title, artist or album…" TextChanged="Filter_Changed" Margin="0,0,12,0"/>
      <ComboBox x:Name="StatusFilter" Grid.Column="1" SelectedIndex="0" SelectionChanged="Filter_Changed" MinWidth="142" Margin="0,0,12,0">
-      <ComboBoxItem Content="All songs"/><ComboBoxItem Content="Missing"/><ComboBoxItem Content="Downloaded"/><ComboBoxItem Content="Failed"/><ComboBoxItem Content="Downloading"/><ComboBoxItem Content="Queued"/>
+      <ComboBoxItem Content="All songs"/><ComboBoxItem Content="Not in selected playlist folder"/><ComboBoxItem Content="Downloaded"/><ComboBoxItem Content="Failed"/><ComboBoxItem Content="Downloading"/><ComboBoxItem Content="Queued"/>
      </ComboBox>
-     <ui:Button x:Name="SelectAllButton" Grid.Column="2" Content="Select all" Click="SelectAll_Click" Margin="0,0,8,0" ToolTip="Select every scanned song, including songs hidden by filters"/>
-     <ui:Button x:Name="ClearSelectionButton" Grid.Column="3" Content="Clear" Click="Clear_Click" Margin="0,0,8,0" ToolTip="Clear the selection for every scanned song"/>
-     <ui:Button Grid.Column="4" Content="YouTube order" Click="ResetSort_Click"/>
+     <CheckBox x:Name="CustomOrderToggle" Grid.Column="2" Content="Custom order" VerticalAlignment="Center" Checked="CustomOrder_Changed" Unchecked="CustomOrder_Changed" ToolTip="Drag songs to arrange the table and saved M3U8. Turn off to use YouTube order and sort columns."/>
     </Grid>
     <Border Grid.Row="4" BorderBrush="#303030" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
      <Grid>
       <ui:DataGrid x:Name="SongGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
-       CanUserReorderColumns="True" CanUserSortColumns="True" CanUserResizeColumns="True" SelectionMode="Extended" RowHeight="42"
+       CanUserReorderColumns="True" CanUserSortColumns="True" CanUserResizeColumns="True" MaxColumnWidth="Infinity" SelectionMode="Extended" RowHeight="42"
        HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#2B2B2B"
        ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto"
        Background="#181818" BorderThickness="0" Sorting="Grid_Sorting" EnableRowVirtualization="True" EnableColumnVirtualization="True">
+       <ui:DataGrid.Template>
+        <ControlTemplate TargetType="ui:DataGrid">
+         <ScrollViewer x:Name="DG_ScrollViewer" Focusable="False" CanContentScroll="True" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+          <ScrollViewer.Template>
+           <ControlTemplate TargetType="ScrollViewer">
+            <Grid>
+             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+             <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+             <DataGridColumnHeadersPresenter x:Name="PART_ColumnHeadersPresenter"/>
+             <ScrollContentPresenter x:Name="PART_ScrollContentPresenter" Grid.Row="1" CanContentScroll="{TemplateBinding CanContentScroll}"/>
+             <ScrollBar x:Name="PART_VerticalScrollBar" Grid.Column="1" Grid.RowSpan="2" Style="{StaticResource FullHeightScrollBar}" Maximum="{TemplateBinding ScrollableHeight}" ViewportSize="{TemplateBinding ViewportHeight}" Value="{Binding VerticalOffset, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}" Visibility="{TemplateBinding ComputedVerticalScrollBarVisibility}"/>
+             <ScrollBar x:Name="PART_HorizontalScrollBar" Grid.Row="2" Orientation="Horizontal" Maximum="{TemplateBinding ScrollableWidth}" ViewportSize="{TemplateBinding ViewportWidth}" Value="{Binding HorizontalOffset, RelativeSource={RelativeSource TemplatedParent}, Mode=OneWay}" Visibility="{TemplateBinding ComputedHorizontalScrollBarVisibility}"/>
+            </Grid>
+           </ControlTemplate>
+          </ScrollViewer.Template>
+          <ItemsPresenter SnapsToDevicePixels="True"/>
+         </ScrollViewer>
+        </ControlTemplate>
+       </ui:DataGrid.Template>
        <DataGrid.RowStyle><Style TargetType="DataGridRow"><Setter Property="Background" Value="#181818"/><Setter Property="Foreground" Value="#F1F1F1"/>
         <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#301919"/></Trigger></Style.Triggers>
        </Style></DataGrid.RowStyle>
@@ -90,18 +104,26 @@
         <DataGridTemplateColumn Width="44" MinWidth="44" CanUserSort="False">
          <DataGridTemplateColumn.HeaderStyle><Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}"><Setter Property="Padding" Value="0"/></Style></DataGridTemplateColumn.HeaderStyle>
          <DataGridTemplateColumn.Header>
-          <ui:Button x:Name="HeaderSelectionButton" Content="☐" Width="30" Height="28" MinWidth="0" MinHeight="0" Padding="0" FontSize="17" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Click="HeaderSelection_Click" ToolTip="Select all songs" AutomationProperties.Name="Select all songs" IsEnabled="False"/>
+          <ui:Button x:Name="HeaderSelectionButton" Content="+" Appearance="Primary" Width="30" Height="28" MinWidth="0" MinHeight="0" Padding="0" FontFamily="Segoe UI Symbol" FontSize="17" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Click="HeaderSelection_Click" ToolTip="Select all songs" AutomationProperties.Name="Select all songs" IsEnabled="False"/>
          </DataGridTemplateColumn.Header>
          <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox Foreground="White" IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Download this song"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
         </DataGridTemplateColumn>
-        <DataGridTextColumn Header="Position" Binding="{Binding Position}" SortMemberPath="Position" Width="88" MinWidth="88" IsReadOnly="True"/>
-        <DataGridTextColumn Header="Title" Binding="{Binding Title}" ElementStyle="{StaticResource SongText}" SortMemberPath="Title" Width="2*" MinWidth="180" IsReadOnly="True"/>
-        <DataGridTextColumn Header="Artist" Binding="{Binding Artist}" ElementStyle="{StaticResource SongText}" SortMemberPath="Artist" Width="*" MinWidth="130" IsReadOnly="True"/>
-        <DataGridTextColumn Header="Album" Binding="{Binding AlbumText}" ElementStyle="{StaticResource SongText}" SortMemberPath="Album" Width="*" MinWidth="120" IsReadOnly="True"/>
-        <DataGridTextColumn Header="Genre" Binding="{Binding GenreText}" SortMemberPath="Genre" Width="105" MinWidth="105" IsReadOnly="True"/>
-        <DataGridTextColumn Header="Duration" Binding="{Binding DurationText}" SortMemberPath="Duration" Width="95" MinWidth="95" IsReadOnly="True"/>
-        <DataGridTextColumn Header="File Size" Binding="{Binding SizeText}" SortMemberPath="FileSize" Width="100" MinWidth="100" IsReadOnly="True"/>
-        <DataGridTextColumn Header="Status" Binding="{Binding Status}" ElementStyle="{StaticResource StatusTextStyle}" SortMemberPath="Status" Width="120" MinWidth="120" IsReadOnly="True"/>
+        <DataGridTextColumn Header="No." Binding="{Binding Position}" ElementStyle="{StaticResource SongText}" SortMemberPath="Position" Width="64" MinWidth="40" IsReadOnly="True"/>
+        <DataGridTemplateColumn Header="Thumbnail" Width="100" MinWidth="100" CanUserSort="False" IsReadOnly="True">
+         <DataGridTemplateColumn.CellTemplate><DataTemplate>
+          <Button Width="34" Height="34" Padding="0" Background="Transparent" BorderThickness="0" HorizontalAlignment="Center" VerticalAlignment="Center" Click="Thumbnail_Click" ToolTip="Click to enlarge thumbnail" AutomationProperties.Name="Preview song thumbnail">
+          <Border CornerRadius="4" Background="#292929" ClipToBounds="True">
+           <Grid><TextBlock Text="♫" Foreground="#888888" HorizontalAlignment="Center" VerticalAlignment="Center"/><Image Source="{Binding Thumbnail}" Stretch="UniformToFill" AutomationProperties.Name="Song thumbnail"/></Grid>
+          </Border>
+          </Button>
+         </DataTemplate></DataGridTemplateColumn.CellTemplate>
+        </DataGridTemplateColumn>
+        <DataGridTextColumn Header="Title" Binding="{Binding Title}" ElementStyle="{StaticResource SongText}" SortMemberPath="Title" Width="2*" MinWidth="48" IsReadOnly="True"/>
+        <DataGridTextColumn Header="Artist" Binding="{Binding Artist}" ElementStyle="{StaticResource SongText}" SortMemberPath="Artist" Width="*" MinWidth="48" IsReadOnly="True"/>
+        <DataGridTextColumn Header="Album" Binding="{Binding AlbumText}" ElementStyle="{StaticResource SongText}" SortMemberPath="Album" Width="*" MinWidth="48" IsReadOnly="True"/>
+        <DataGridTextColumn Header="Duration" Binding="{Binding DurationText}" ElementStyle="{StaticResource SongText}" SortMemberPath="Duration" Width="95" MinWidth="48" IsReadOnly="True"/>
+        <DataGridTextColumn Header="File Size" Binding="{Binding SizeText}" ElementStyle="{StaticResource SongText}" SortMemberPath="FileSize" Width="100" MinWidth="48" IsReadOnly="True"/>
+        <DataGridTextColumn Header="Status" Binding="{Binding StatusText}" ElementStyle="{StaticResource StatusTextStyle}" SortMemberPath="Status" Width="1.5*" MinWidth="60" IsReadOnly="True"/>
        </DataGrid.Columns>
       </ui:DataGrid>
       <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Margin="0,44,0,0">
@@ -125,6 +147,20 @@
      <Expander x:Name="ActivityPanel" Header="Activity" Margin="0,6,0,0" Visibility="Collapsed"><TextBox x:Name="Activity" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxHeight="100"/></Expander>
     </StackPanel>
    </Grid>
+   <ui:SnackbarPresenter x:Name="Notifications" Grid.Column="1" Panel.ZIndex="10" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="24" MaxWidth="440"/>
+  </Grid>
+  <Grid x:Name="ThumbnailPreview" Grid.RowSpan="2" Panel.ZIndex="30" Visibility="Collapsed" Background="#CC000000" MouseDown="PreviewBackdrop_MouseDown">
+   <Border Background="#181818" BorderBrush="#383838" BorderThickness="1" CornerRadius="12" Padding="20" Margin="32" MaxWidth="720" MaxHeight="620" HorizontalAlignment="Center" VerticalAlignment="Center">
+    <Grid>
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+     <TextBlock x:Name="PreviewTitle" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,14"/>
+     <Grid Grid.Row="1" Width="600" MaxWidth="600" Height="420">
+      <TextBlock x:Name="PreviewMessage" Text="Loading..." Foreground="#AAAAAA" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+      <Image x:Name="PreviewImage" Stretch="Uniform"/>
+     </Grid>
+     <ui:Button Grid.Row="2" Content="Close" Appearance="Primary" Foreground="White" HorizontalAlignment="Right" Click="ClosePreview_Click" Margin="0,16,0,0" MinWidth="90"/>
+    </Grid>
+   </Border>
   </Grid>
  </Grid>
 </ui:FluentWindow>

@@ -4,10 +4,10 @@ Python
 https://www.python.org/
 Python Software Foundation License
 
-FFmpeg (Gyan.dev Windows build; tools/ffmpeg.exe -version identifies the bundled version)
+FFmpeg (BtbN Windows LGPL shared build; app/tools/ffmpeg.exe -version identifies the bundled version)
 https://ffmpeg.org/
-https://www.gyan.dev/ffmpeg/builds/
-The bundled build is distributed under GPL-compatible terms. Its LICENSE and README are included in the tools folder. Corresponding FFmpeg source is available from https://ffmpeg.org/releases/ and build information is available from the Gyan.dev URL above.
+https://github.com/BtbN/FFmpeg-Builds
+The bundled shared build uses LGPL-compatible terms. Its LICENSE.txt and ORIGIN.md are included in app/tools. FFmpeg source is available from https://ffmpeg.org/releases/ and the build scripts and dependency source information are available in the BtbN repository above.
 
 yt-dlp
 https://github.com/yt-dlp/yt-dlp

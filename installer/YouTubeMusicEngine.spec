@@ -12,7 +12,9 @@ hiddenimports += collect_submodules("yt_dlp_plugins.extractor")
 root = Path(SPECPATH).resolve().parent
 a = Analysis([str(root / "desktop_bridge.py")], pathex=[str(root)],
     binaries=binaries, datas=datas, hiddenimports=hiddenimports,
-    hookspath=[], hooksconfig={}, runtime_hooks=[], excludes=[], noarchive=False)
+    hookspath=[], hooksconfig={}, runtime_hooks=[],
+    excludes=["PIL.AvifImagePlugin", "PIL._avif", "PIL.ImageFont", "PIL._imagingft",
+              "PIL.ImageCms", "PIL._imagingcms", "PIL.ImageTk", "PIL.ImageQt", "tkinter"], noarchive=False)
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, [], exclude_binaries=True, name="YouTubeMusicEngine",
     debug=False, strip=False, upx=False, console=True)

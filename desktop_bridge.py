@@ -12,6 +12,7 @@ import math
 from threading import Lock
 
 import ytmusic_downloader as engine
+import desktop_metadata
 
 _write_lock = Lock()
 _protocol = sys.stdout
@@ -88,9 +89,10 @@ def row(track: engine.Track, folder: Path) -> dict:
                 genre = (audio.get("genre") or [genre])[0]
         except Exception:
             pass  # Damaged/missing tags don't hide a locally existing file.
-    return dict(videoId=track.video_id, position=track.index, title=track.title,
+    return dict(videoId=track.video_id, position=track.index, title=track.title, thumbnailUrl=track.thumbnail_url,
                 artist=engine.artists_to_text(track.artists), album=track.album,
-                genre=genre, duration=duration, fileSize=path.stat().st_size if path.is_file() else None,
+                genre=genre, duration=duration, fileSize=path.stat().st_size if path.is_file() else desktop_metadata.estimated_size(duration),
+                sizeEstimated=not path.is_file(), metadataChecked=bool(genre),
                 status="Downloaded" if path.is_file() else "Missing")
 
 
@@ -108,8 +110,10 @@ def scan(request: dict) -> dict:
         playlist_id = str(manifest["playlist_id"])
         title = str(manifest.get("playlist_title") or playlist_id)
         tracks, total, skipped, folder = [track], 1, [], parent
+        emit("scan_progress", detected=1, unavailable=0)
     else:
-        playlist_id, title, total, tracks, skipped = engine.fetch_playlist_tracks(url)
+        playlist_id, title, total, tracks, skipped = engine.fetch_playlist_tracks(url,
+            on_progress=lambda detected, unavailable: emit("scan_progress", detected=detected, unavailable=unavailable))
         folder = resolve_folder(parent, playlist_id, title)
         manifest = engine.load_manifest(folder / engine.MANIFEST_NAME)
         tracks = engine.prepend_manual_tracks(manifest, tracks)
@@ -119,9 +123,14 @@ def scan(request: dict) -> dict:
         filename = engine.safe_manifest_filename(entry.get("output_filename"), ".opus")
         if filename:
             track.filename = filename
+    rows = []
+    for checked, track in enumerate(tracks, start=1):
+        rows.append(row(track, folder))
+        emit("scan_progress", detected=len(tracks), unavailable=len(skipped), checked=checked, total=len(tracks))
     return dict(url=url, folder=str(folder), playlistId=playlist_id, title=title,
                 single=single, total=total, skipped=skipped,
-                tracks=[asdict(track) for track in tracks], rows=[row(track, folder) for track in tracks])
+                customOrder=list(dict.fromkeys(manifest.get("custom_order") or [])),
+                tracks=[asdict(track) for track in tracks], rows=rows)
 
 
 def download(request: dict) -> None:
@@ -156,7 +165,7 @@ def download(request: dict) -> None:
         code = engine.sync_playlist(url, folder, options,
             selected_video_ids=selected,
             prepared_playlist=(snapshot["playlistId"], snapshot["title"], snapshot["total"], tracks, snapshot["skipped"]),
-            on_track=progress)
+            on_track=progress, custom_order=request.get("customOrder"))
     emit("done", result=code, message="Sync complete." if code == 0 else "Sync finished with failed songs. Select Retry failed to try again.")
 
 
@@ -170,6 +179,8 @@ def main() -> int:
                 emit("scan", snapshot=scan(request))
             elif request["action"] == "download":
                 download(request)
+            elif request["action"] == "metadata":
+                desktop_metadata.stream(request, emit)
             else:
                 raise ValueError("Unknown desktop action.")
         return 0

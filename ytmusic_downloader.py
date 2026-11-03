@@ -28,7 +28,7 @@ from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
-APP_VERSION = "2.1.2"
+APP_VERSION = "2.2.0"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
 DOWNLOAD_ERRORS_NAME = "download_errors.log"
@@ -281,6 +281,8 @@ def save_manifest(
     tracks_by_video_id: dict[str, dict[str, Any]],
     playlist_title: str | None = None,
     m3u8_filename: str | None = None,
+    *,
+    custom_order: list[str] | None = None,
 ) -> None:
     ordered_tracks = sorted(
         tracks_by_video_id.values(),
@@ -290,6 +292,11 @@ def save_manifest(
         "playlist_id": playlist_id,
         "tracks": ordered_tracks,
     }
+    previous = load_manifest(path)
+    if custom_order is not None:
+        data["custom_order"] = custom_order
+    elif previous.get("playlist_id") == playlist_id and "custom_order" in previous:
+        data["custom_order"] = previous["custom_order"]
     if playlist_title is not None:
         data["playlist_title"] = playlist_title
     if m3u8_filename is not None:
@@ -358,7 +365,7 @@ def find_existing_playlist_folder(parent_dir: Path, playlist_id: str) -> Path | 
 def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
     """Normalize the small subset of ytmusicapi playlist data this script needs."""
     video_id = raw_track.get("videoId")
-    if not video_id:
+    if not video_id or raw_track.get("isAvailable") is False:
         return None
     artists = [
         item.get("name", "").strip()
@@ -384,17 +391,27 @@ def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
     )
 
 
-def fetch_playlist_tracks(playlist_url: str) -> tuple[str, str, int, list[Track], list[int]]:
+def fetch_playlist_tracks(
+    playlist_url: str,
+    on_progress: Callable[[int, int], None] | None = None,
+) -> tuple[str, str, int, list[Track], list[int]]:
     """Fetch ordered tracks with ytmusicapi, not yt-dlp playlist parsing.
 
     Number only valid/downloadable tracks, so skipped playlist items do not
     create gaps like 023, 025.
     """
     playlist_id = parse_playlist_id(playlist_url)
-    playlist = YTMusic().get_playlist(playlist_id, limit=None)
+    if on_progress is None:
+        client = YTMusic()
+    else:
+        from playlist_progress import ProgressYTMusic
+        client = ProgressYTMusic(on_progress)
+    playlist = client.get_playlist(playlist_id, limit=None)
 
     playlist_title = str(playlist.get("title") or playlist_id).strip()
     playlist_items = playlist.get("tracks", [])
+    if on_progress is not None and client.progress_items and client.progress_reliable:
+        playlist_items = client.progress_items
 
     tracks: list[Track] = []
     skipped_items: list[int] = []
@@ -409,6 +426,9 @@ def fetch_playlist_tracks(playlist_url: str) -> tuple[str, str, int, list[Track]
             track_number += 1
         else:
             skipped_items.append(original_index)
+
+    if on_progress is not None:
+        on_progress(len(tracks), len(skipped_items))
 
     return playlist_id, playlist_title, len(playlist_items), tracks, skipped_items
 
@@ -977,6 +997,7 @@ def sync_playlist(
     selected_video_ids: set[str] | None = None,
     prepared_playlist: tuple[str, str, int, list[Track], list[int]] | None = None,
     on_track: Callable[[Track, str], None] | None = None,
+    custom_order: list[str] | None = None,
 ) -> int:
     playlist_id, playlist_title, total_items, tracks, skipped_items = (
         prepared_playlist if prepared_playlist is not None else fetch_playlist_tracks(playlist_url)
@@ -1138,10 +1159,14 @@ def sync_playlist(
     elif failed_downloads_path.exists():
         failed_downloads_path.unlink()
 
+    playlist_tracks = tracks
+    if custom_order is not None:
+        ranks = {video_id: rank for rank, video_id in enumerate(custom_order)}
+        playlist_tracks = sorted(tracks, key=lambda track: (ranks.get(track.video_id, len(ranks)), track.index))
     m3u8_path, m3u8_track_count = write_poweramp_m3u8(
         output_dir,
         playlist_title,
-        tracks,
+        playlist_tracks,
         known_tracks,
         previous_m3u8_filename,
     )
@@ -1151,6 +1176,7 @@ def sync_playlist(
         known_tracks,
         playlist_title,
         m3u8_path.name,
+        custom_order=custom_order or [],
     )
 
     print("")

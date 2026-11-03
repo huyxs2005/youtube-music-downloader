@@ -87,9 +87,9 @@ internal static class Program
                 Check(grid.ActualHeight>=320,$"Song list should have room for many rows after scanning (height {grid.ActualHeight:0})");
                 Call(window,"ShowPage",true);
                 Check(Field<TextBlock>(window,"EmptyTitle").Text=="No downloads yet","Downloads tab should explain an empty queue");
-                Check(grid.Columns[4].Visibility==Visibility.Collapsed && grid.Columns[8].Visibility==Visibility.Visible,"Downloads should prioritize status over album metadata");
+                Check(grid.Columns.Single(c=>c.SortMemberPath=="Album").Visibility==Visibility.Collapsed && grid.Columns.Single(c=>c.SortMemberPath=="Status").Visibility==Visibility.Visible,"Downloads should prioritize status over album metadata");
                 Call(window,"ShowPage",false);
-                Check(grid.Columns[4].Visibility==Visibility.Visible,"Playlist tab should restore all metadata columns");
+                Check(grid.Columns.Single(c=>c.SortMemberPath=="Album").Visibility==Visibility.Visible,"Playlist tab should restore all metadata columns");
                 Check(((ListCollectionView)grid.ItemsSource).Count==3,"Returning to Playlists should restore all songs");
                 Call(window,"SetBusy",true);
                 Check(grid.IsEnabled && !(bool)window.Tag,"During a download, browsing remains enabled and selection is locked");
@@ -104,7 +104,7 @@ internal static class Program
                 resizeHandle.RaiseEvent(new DragCompletedEventArgs(40,0,false){RoutedEvent=Thumb.DragCompletedEvent});
                 window.UpdateLayout();
                 Check(titleColumn.ActualWidth>oldWidth,"Dragging the header gripper should widen the column");
-                foreach (string property in new[]{"Title","Artist","Album","Genre","Duration","Position","FileSize"}) {
+                foreach (string property in new[]{"Title","Artist","Album","Duration","Position","FileSize"}) {
                     var column = grid.Columns.Single(c=>c.SortMemberPath==property);
                     Call(window,"SetSort","Status",ListSortDirection.Ascending);
                     Call(window,"Grid_Sorting",grid,new DataGridSortingEventArgs(column));
@@ -132,7 +132,7 @@ internal static class Program
                 Check(Field<TextBlock>(window,"EmptyTitle").Text.Contains("No songs"),"No-match search should explain the blank table");
                 search.Clear();
                 Check(Field<StackPanel>(window,"EmptyState").Visibility==Visibility.Collapsed,"Clear search should dismiss no-match message");
-                Call(window,"Clear_Click",window,new RoutedEventArgs());
+                Call(window,"SetSelection",false);
                 Check(songs.All(s=>!s.IsSelected),"Clear selection");
                 var master=Field<Wpf.Ui.Controls.Button>(window,"HeaderSelectionButton");
                 Check(System.Windows.Automation.AutomationProperties.GetName(master)=="Select all songs","Header button should describe selecting all");
@@ -151,7 +151,7 @@ internal static class Program
                 Check(songs.All(s=>s.IsSelected),"Busy header clicks must not alter download selection");
                 Call(window,"SetBusy",false);
                 search.Clear();
-                Call(window,"SelectAll_Click",window,new RoutedEventArgs());
+                Call(window,"SetSelection",true);
                 Check(songs.All(s=>s.IsSelected),"Select all");
                 songs.Single(s=>s.VideoId=="c").IsSelected=false;
                 await (Task)Call(window,"DownloadAsync")!;

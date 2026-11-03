@@ -9,6 +9,14 @@ public sealed class BackendClient
 {
     public static readonly JsonSerializerOptions JsonOptions = new() { PropertyNameCaseInsensitive = true };
     public static string Root { get; } = FindRoot();
+    public static string ApplicationFolder {
+        get {
+            var folder = new DirectoryInfo(AppContext.BaseDirectory);
+            return folder.Name.Equals("app", StringComparison.OrdinalIgnoreCase) && folder.Parent != null &&
+                File.Exists(Path.Combine(folder.Parent.FullName, "YouTubeMusicDownloader.Desktop.exe"))
+                ? folder.Parent.FullName : AppContext.BaseDirectory;
+        }
+    }
     public static string BackendFolder => File.Exists(Path.Combine(AppContext.BaseDirectory, "backend", "desktop_bridge.py"))
         ? Path.Combine(AppContext.BaseDirectory, "backend") : Root;
     private static string FindRoot()
@@ -17,7 +25,7 @@ public sealed class BackendClient
             if (File.Exists(Path.Combine(folder.FullName, "ytmusic_downloader.py"))) return folder.FullName;
         return AppContext.BaseDirectory;
     }
-    public async Task RunAsync(object request, Action<JsonElement> receive, Action<string> log)
+    public async Task RunAsync(object request, Action<JsonElement> receive, Action<string> log, CancellationToken cancellationToken = default)
     {
         string? configured = Environment.GetEnvironmentVariable("YTM_DOWNLOADER_PYTHON");
         string local = Path.Combine(Root, ".venv", "Scripts", "python.exe");
@@ -39,6 +47,10 @@ public sealed class BackendClient
         // Resolve bundled tools in portable desktop builds too.
         start.Environment["PATH"] = Path.Combine(AppContext.BaseDirectory, "tools") + Path.PathSeparator + start.Environment["PATH"];
         using var process = Process.Start(start) ?? throw new IOException("Could not start the download engine.");
+        using var cancellation = cancellationToken.Register(() => {
+            try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
+            catch (InvalidOperationException) { }
+        });
         await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request));
         process.StandardInput.Close();
         var errors = new StringBuilder();
@@ -58,6 +70,7 @@ public sealed class BackendClient
         }
         await errorTask;
         await process.WaitForExitAsync();
+        cancellationToken.ThrowIfCancellationRequested();
         if (process.ExitCode != 0 && !received)
             throw new IOException("The download engine could not start. Check Python and requirements.txt. " + errors.ToString());
         if (!received) throw new IOException("The download engine returned no result.");

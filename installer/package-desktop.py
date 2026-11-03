@@ -10,18 +10,19 @@ import zipfile
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path)
-    parser.add_argument("--version", default="2.1.2")
+    parser.add_argument("--version", default="2.2.0")
     parser.add_argument("--output", type=Path, default=Path("dist/releases"))
     args = parser.parse_args()
     folder = args.folder.resolve()
-    required = ["YouTubeMusicDownloader.Desktop.exe", "YouTubeMusicDownloader.Desktop.dll",
-                "YouTubeMusicDownloader.Desktop.runtimeconfig.json", "coreclr.dll",
-                "engine/YouTubeMusicEngine.exe", "tools/ffmpeg.exe", "tools/ffprobe.exe",
-                "README.md", "THIRD_PARTY_NOTICES.txt", "DESKTOP_THIRD_PARTY_NOTICES.txt"]
+    required = ["YouTubeMusicDownloader.Desktop.exe", "app/YouTubeMusicDownloader.Desktop.exe",
+                "app/YouTubeMusicDownloader.Desktop.dll", "app/YouTubeMusicDownloader.Desktop.runtimeconfig.json", "app/coreclr.dll",
+                "app/engine/YouTubeMusicEngine.exe", "app/tools/ffmpeg.exe", "app/tools/ffprobe.exe",
+                "app/README.md", "app/THIRD_PARTY_NOTICES.txt", "app/DESKTOP_THIRD_PARTY_NOTICES.txt"]
     for name in required:
         if not (folder / name).is_file():
             raise SystemExit(f"Release folder is missing {name}")
-    files = sorted(path for path in folder.rglob("*") if path.is_file())
+    # Only distribute application files, never a user's adjacent cookies or playlist folders.
+    files = [folder / "YouTubeMusicDownloader.Desktop.exe"] + sorted(path for path in (folder / "app").rglob("*") if path.is_file())
     for path in files:
         name = path.name.lower()
         if (name.startswith("cookies") and name.endswith(".txt")) or path.suffix.lower() in {".opus", ".m3u8"} or name in {

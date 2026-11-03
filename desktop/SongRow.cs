@@ -2,39 +2,82 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Text.Json;
+using System.Windows.Media.Imaging;
 
 namespace YouTubeMusicDownloader.Desktop;
 
 public sealed class SongRow : INotifyPropertyChanged
 {
     public string VideoId { get; set; } = "";
-    public int Position { get; set; }
+    private int position;
+    public int Position { get => position; set { position = value; Changed(); } }
+    public int YouTubePosition { get; set; }
+    public int CustomPosition { get; set; }
     public string Title { get; set; } = "";
+    public string? ThumbnailUrl { get; set; }
+    private BitmapImage? thumbnail;
+    private bool thumbnailRequested;
+    public BitmapImage? Thumbnail
+    {
+        get {
+            if (thumbnailRequested) return thumbnail;
+            thumbnailRequested = true;
+            if (Uri.TryCreate(ThumbnailUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps) {
+                try {
+                    thumbnail = new BitmapImage();
+                    thumbnail.BeginInit();
+                    thumbnail.DecodePixelWidth = 72;
+                    thumbnail.UriSource = uri;
+                    thumbnail.EndInit();
+                } catch (Exception) { thumbnail = null; }
+            }
+            return thumbnail;
+        }
+    }
     public string Artist { get; set; } = "";
     public string? Album { get; set; }
     public string? Genre { get; set; }
     public double? Duration { get; set; }
     public long? FileSize { get; set; }
+    public bool SizeEstimated { get; set; }
+    public bool MetadataFailed { get; set; }
+    private bool metadataChecked;
+    public bool MetadataChecked { get => metadataChecked; set { metadataChecked = value; Changed(nameof(GenreText)); Changed(nameof(SizeText)); } }
     public string Status { get; set; } = "Missing";
+    public string StatusText => Status is "Missing" or "Not selected" ? "Not in selected playlist folder" : Status;
     private bool selected = true;
     public bool IsSelected { get => selected; set { selected = value; Changed(); } }
-    public string AlbumText => string.IsNullOrWhiteSpace(Album) ? "Unknown" : Album;
-    public string GenreText => string.IsNullOrWhiteSpace(Genre) ? "Unknown" : Genre;
+    public string AlbumText => string.IsNullOrWhiteSpace(Album) || Album.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ? "None" : Album;
+    public string GenreText => string.IsNullOrWhiteSpace(Genre) ? (MetadataChecked ? (MetadataFailed ? "Unavailable" : "Not provided") : "Loading…") : Genre;
     public string DurationText => Duration is double seconds ?
         (seconds >= 3600 ? TimeSpan.FromSeconds(seconds).ToString(@"h\:mm\:ss") : TimeSpan.FromSeconds(seconds).ToString(@"m\:ss")) : "Unknown";
-    public string SizeText => FileSize is long bytes ? bytes switch {
+    public string SizeText => FileSize is long bytes ? (SizeEstimated ? "~" : "") + (bytes switch {
         >= 1073741824 => $"{bytes / 1073741824d:0.##} GB",
         >= 1048576 => $"{bytes / 1048576d:0.##} MB",
         >= 1024 => $"{bytes / 1024d:0.##} KB",
         _ => $"{bytes} B"
-    } : "Unknown";
+    }) : MetadataChecked ? "Unavailable" : "Loading…";
+    public void ApplyMetadata(JsonElement element)
+    {
+        var updated = element.Deserialize<SongRow>(BackendClient.JsonOptions)!;
+        Genre = updated.Genre ?? Genre;
+        MetadataFailed = updated.MetadataFailed;
+        Duration = updated.Duration ?? Duration;
+        if (FileSize == null || SizeEstimated) {
+            FileSize = updated.FileSize ?? FileSize;
+            SizeEstimated = updated.FileSize != null ? updated.SizeEstimated : SizeEstimated;
+        }
+        MetadataChecked = true;
+        Changed("");
+    }
     public void Apply(JsonElement element)
     {
         var updated = element.Deserialize<SongRow>(BackendClient.JsonOptions)!;
         Status = updated.Status;
-        FileSize = updated.FileSize;
-        Duration = updated.Duration;
-        Genre = updated.Genre;
+        FileSize = updated.FileSize ?? FileSize;
+        SizeEstimated = updated.FileSize != null ? updated.SizeEstimated : SizeEstimated;
+        Duration = updated.Duration ?? Duration;
+        Genre = updated.Genre ?? Genre;
         Changed("");
     }
     public event PropertyChangedEventHandler? PropertyChanged;
@@ -49,7 +92,7 @@ public sealed class SongComparer(string property, ListSortDirection direction) :
         var a = (SongRow)x!;
         var b = (SongRow)y!;
         object? Value(SongRow song) => property switch {
-            "Position" => song.Position, "Title" => song.Title, "Artist" => song.Artist,
+            "Position" => song.Position, "CustomPosition" => song.CustomPosition, "Title" => song.Title, "Artist" => song.Artist,
             "Album" => song.Album, "Genre" => song.Genre, "Duration" => song.Duration,
             "FileSize" => song.FileSize, "Status" => song.Status, _ => song.Position
         };

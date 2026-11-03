@@ -6,6 +6,24 @@
    <SolidColorBrush x:Key="AccentBrush" Color="#FF0000" />
    <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="White" />
    <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="White" />
+   <Style x:Key="ScrollTrackButton" TargetType="RepeatButton">
+    <Setter Property="Focusable" Value="False"/>
+    <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton"><Border Background="Transparent"/></ControlTemplate></Setter.Value></Setter>
+   </Style>
+   <Style x:Key="FullHeightScrollBar" TargetType="ScrollBar">
+    <Setter Property="Width" Value="16"/><Setter Property="Orientation" Value="Vertical"/>
+    <Setter Property="Template"><Setter.Value>
+     <ControlTemplate TargetType="ScrollBar">
+      <Grid Background="#252525">
+       <Track x:Name="PART_Track" Orientation="Vertical" IsDirectionReversed="True" Minimum="{TemplateBinding Minimum}" Maximum="{TemplateBinding Maximum}" Value="{TemplateBinding Value}" ViewportSize="{TemplateBinding ViewportSize}">
+        <Track.DecreaseRepeatButton><RepeatButton Command="ScrollBar.PageUpCommand" Style="{StaticResource ScrollTrackButton}"/></Track.DecreaseRepeatButton>
+        <Track.Thumb><Thumb><Thumb.Template><ControlTemplate TargetType="Thumb"><Border x:Name="Grip" Background="#777777" CornerRadius="5" Margin="3,2"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Grip" Property="Background" Value="#FF5252"/></Trigger><Trigger Property="IsDragging" Value="True"><Setter TargetName="Grip" Property="Background" Value="#FF0000"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Thumb.Template></Thumb></Track.Thumb>
+        <Track.IncreaseRepeatButton><RepeatButton Command="ScrollBar.PageDownCommand" Style="{StaticResource ScrollTrackButton}"/></Track.IncreaseRepeatButton>
+       </Track>
+      </Grid>
+     </ControlTemplate>
+    </Setter.Value></Setter>
+   </Style>
    <Style x:Key="Muted" TargetType="TextBlock"><Setter Property="Foreground" Value="#AAAAAA" /></Style>
    <Style x:Key="SongText" TargetType="TextBlock">
     <Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="12,0"/>
@@ -25,6 +43,7 @@
     <Setter Property="Padding" Value="18"/>
    </Style>
    <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
+    <Setter Property="ToolTip" Value="Drag an edge to resize. Double-click an edge or heading to fit the text."/>
     <Setter Property="MinHeight" Value="44"/><Setter Property="Padding" Value="12,8"/>
     <Setter Property="Background" Value="#212121"/><Setter Property="Foreground" Value="#F1F1F1"/>
     <Setter Property="Template">
@@ -34,7 +53,7 @@
        <Border x:Name="HeaderBorder" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" BorderBrush="#363636" BorderThickness="0,0,1,1">
         <DockPanel>
          <TextBlock x:Name="Arrow" DockPanel.Dock="Right" Text="▲" Visibility="Collapsed" Margin="6,0,0,0" Foreground="#FF6666" FontSize="10" VerticalAlignment="Center"/>
-         <ContentPresenter VerticalAlignment="Center"/>
+         <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"><ContentPresenter.Resources><Style TargetType="TextBlock"><Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="TextWrapping" Value="NoWrap"/></Style></ContentPresenter.Resources></ContentPresenter>
         </DockPanel>
        </Border>
        <Thumb x:Name="PART_LeftHeaderGripper" HorizontalAlignment="Left" Width="6" Cursor="SizeWE" Background="Transparent">
