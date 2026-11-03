@@ -3,7 +3,7 @@ from pathlib import Path
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas, binaries, hiddenimports = [], [], ["PIL.Image", "mutagen.oggopus"]
-for package in ("yt_dlp", "ytmusicapi", "mutagen"):
+for package in ("yt_dlp", "yt_dlp_ejs", "ytmusicapi", "mutagen"):
     data, binary, imports = collect_all(package)
     datas += data
     binaries += binary

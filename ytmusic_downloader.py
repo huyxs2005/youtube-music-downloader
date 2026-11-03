@@ -28,7 +28,7 @@ from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
-APP_VERSION = "2.2.1"
+APP_VERSION = "2.2.2"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
 DOWNLOAD_ERRORS_NAME = "download_errors.log"
@@ -61,13 +61,13 @@ def application_dir() -> Path:
 
 def configure_bundled_tools() -> None:
     """Prefer FFmpeg and other command-line tools shipped beside the app."""
-    tools_dir = application_dir() / "tools"
-    if not tools_dir.is_dir():
-        return
-    current_path = os.environ.get("PATH", "")
-    path_parts = current_path.split(os.pathsep) if current_path else []
-    if str(tools_dir) not in path_parts:
-        os.environ["PATH"] = os.pathsep.join([str(tools_dir), *path_parts])
+    for tools_dir in (application_dir() / "tools", application_dir().parent / "tools"):
+        if not tools_dir.is_dir():
+            continue
+        current_path = os.environ.get("PATH", "")
+        path_parts = current_path.split(os.pathsep) if current_path else []
+        if str(tools_dir) not in path_parts:
+            os.environ["PATH"] = os.pathsep.join([str(tools_dir), *path_parts])
 
 
 def default_cookies_path() -> Path:
@@ -109,6 +109,24 @@ class Track:
 @dataclass
 class DownloadOptions:
     cookies_file: str | None = None
+    on_progress: Callable[[Track, float | None, str], None] | None = None
+    on_error: Callable[[Track, str], None] | None = None
+
+
+def javascript_runtimes() -> dict[str, dict[str, str]]:
+    """Enable a bundled lightweight runtime, or a supported installed alternative."""
+    for executable, name in (("qjs", "quickjs"), ("deno", "deno"), ("node", "node")):
+        path = shutil.which(executable)
+        if path:
+            return {name: {"path": path}}
+    return {}
+
+
+def safe_error_message(error: BaseException | str) -> str:
+    text = re.sub(r"\x1b\[[0-9;]*m", "", str(error))
+    text = re.sub(r"(?im)\b(cookie|set-cookie|authorization)\s*:\s*[^\r\n]+", r"\1: [redacted]", text)
+    text = re.sub(r"https?://[^\s<>\"']+", lambda match: urlparse(match.group())._replace(query="", fragment="", netloc=urlparse(match.group()).hostname or "").geturl(), text)
+    return text.strip()[:1200]
 
 
 class QuietYtdlpLogger:
@@ -123,12 +141,12 @@ class QuietYtdlpLogger:
         pass
 
     @staticmethod
-    def warning(_message: str) -> None:
-        pass
+    def warning(message: str) -> None:
+        print("Download warning: " + safe_error_message(message), file=sys.stderr)
 
     @staticmethod
-    def error(_message: str) -> None:
-        pass
+    def error(message: str) -> None:
+        print("Download error: " + safe_error_message(message), file=sys.stderr)
 
 
 class DuplicateProviderStderrFilter:
@@ -501,6 +519,24 @@ def run_yt_dlp_download(
     format_selector: str,
 ) -> Path:
     initialize_yt_dlp_plugins()
+    last_report = [-1.0, None]
+    def report_transfer(data):
+        if options.on_progress is None:
+            return
+        if data.get("status") == "finished":
+            options.on_progress(track, 100.0, "Processing")
+            return
+        if data.get("status") != "downloading":
+            return
+        total = data.get("total_bytes") or data.get("total_bytes_estimate")
+        percent = 100 * data.get("downloaded_bytes", 0) / total if total else None
+        if percent is None and data.get("fragment_count"):
+            percent = 100 * data.get("fragment_index", 0) / data["fragment_count"]
+        percent = max(0.0, min(100.0, percent)) if percent is not None else None
+        now = time.monotonic()
+        if now - last_report[0] >= 0.25 or last_report[0] < 0:
+            last_report[:] = [now, percent]
+            options.on_progress(track, percent, "Downloading")
     ydl_opts = {
         "format": format_selector,
         "outtmpl": str(temp_stem) + ".%(ext)s",
@@ -509,17 +545,14 @@ def run_yt_dlp_download(
         "no_warnings": True,
         "noprogress": True,
         "logger": QuietYtdlpLogger(),
+        "js_runtimes": javascript_runtimes(),
+        "progress_hooks": [report_transfer],
         "sleep_interval_requests": YT_DLP_SLEEP_REQUESTS_SECONDS,
         "sleep_interval": YT_DLP_SLEEP_INTERVAL_SECONDS,
         "max_sleep_interval": YT_DLP_MAX_SLEEP_INTERVAL_SECONDS,
         "retries": YT_DLP_RETRIES,
         "fragment_retries": YT_DLP_FRAGMENT_RETRIES,
         "remote_components": ["ejs:github"],
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["web_music", "web_safari"],
-            }
-        },
         "postprocessors": [
             {
                 "key": "FFmpegExtractAudio",
@@ -528,11 +561,11 @@ def run_yt_dlp_download(
             }
         ],
     }
-    if options.cookies_file:
-        ydl_opts["cookiefile"] = options.cookies_file
-
     url = f"https://music.youtube.com/watch?v={track.video_id}"
     with YoutubeDL(ydl_opts) as ydl:
+        if options.cookies_file:
+            # Each worker reads the export into memory; never let workers rewrite it concurrently.
+            ydl.cookiejar.load(options.cookies_file)
         ydl.download([url])
 
     opus_path = temp_stem.with_suffix(".opus")
@@ -701,7 +734,7 @@ def failed_track_line(track: Track) -> str:
     return f"{track.index:03d}. {artist_text} - {track.title} ({url})"
 
 
-def write_download_errors(output_dir: Path, failed_tracks: list[Track]) -> Path:
+def write_download_errors(output_dir: Path, failed_tracks: list[Track], reasons: dict[str, str] | None = None) -> Path:
     """Write only the current failed songs, replacing any stale error details."""
     path = output_dir / DOWNLOAD_ERRORS_NAME
     if not failed_tracks:
@@ -714,6 +747,8 @@ def write_download_errors(output_dir: Path, failed_tracks: list[Track]) -> Path:
         for track in failed_tracks:
             file.write(failed_track_line(track))
             file.write("\n")
+            if reasons and track.video_id in reasons:
+                file.write("Reason: " + reasons[track.video_id] + "\n\n")
     temp_path.replace(path)
     return path
 
@@ -928,6 +963,7 @@ def sync_single_track(
 
     final_path = output_dir / track.filename
     download_failed = False
+    failure_reasons: dict[str, str] = {}
     if final_path.is_file():
         print(f"Already downloaded; moving to playlist position 1: {track.filename}")
     else:
@@ -938,11 +974,15 @@ def sync_single_track(
             print(f"Downloaded: {track.filename}")
             if apply_track_metadata(final_path, track):
                 print(f"Updated metadata: {track.filename}")
-        except Exception:
+        except Exception as error:
             download_failed = True
-            print(f"Failed: {track.title} ({track.video_id})")
+            reason = safe_error_message(error)
+            failure_reasons[track.video_id] = reason
+            print(f"Failed: {track.title} ({track.video_id}): {reason}")
+            if options.on_error:
+                options.on_error(track, reason)
 
-    write_download_errors(output_dir, [track] if download_failed else [])
+    write_download_errors(output_dir, [track] if download_failed else [], failure_reasons)
 
     failed_tracks = [
         ordered_track
@@ -998,6 +1038,7 @@ def sync_playlist(
     prepared_playlist: tuple[str, str, int, list[Track], list[int]] | None = None,
     on_track: Callable[[Track, str], None] | None = None,
     custom_order: list[str] | None = None,
+    on_batch: Callable[[list[tuple[Track, str]]], None] | None = None,
 ) -> int:
     playlist_id, playlist_title, total_items, tracks, skipped_items = (
         prepared_playlist if prepared_playlist is not None else fetch_playlist_tracks(playlist_url)
@@ -1041,6 +1082,17 @@ def sync_playlist(
     failed_count = 0
     failed_tracks: list[Track] = []
     pending_downloads: list[Track] = []
+    initial_updates: list[tuple[Track, str]] = []
+    failure_reasons: dict[str, str] = {}
+    write_download_errors(output_dir, [])
+    def record_failure(track: Track, error: BaseException):
+        reason = safe_error_message(error)
+        failure_reasons[track.video_id] = reason
+        print(f"Failed: {track.index:03d} - {track.title} ({track.video_id}): {reason}")
+        with (output_dir / DOWNLOAD_ERRORS_NAME).open("a", encoding="utf-8") as log:
+            log.write(failed_track_line(track) + "\nReason: " + reason + "\n\n")
+        if options.on_error:
+            options.on_error(track, reason)
 
     for track in tracks:
         old_entry = known_tracks.get(track.video_id)
@@ -1056,49 +1108,36 @@ def sync_playlist(
         final_path = output_dir / track.filename
         manually_added = bool(old_entry and old_entry.get("manually_added"))
         known_tracks[track.video_id] = manifest_entry(track, manually_added)
-        save_manifest(
-            manifest_path,
-            playlist_id,
-            known_tracks,
-            playlist_title,
-            previous_m3u8_filename,
-        )
-
         try:
             if final_path.is_file():
-                print(f"Skipping: {track.filename}")
                 skipped_count += 1
-                if on_track:
-                    on_track(track, "Downloaded")
+                status = "Downloaded"
             elif selected_video_ids is not None and track.video_id not in selected_video_ids:
-                print(f"Not selected: {track.filename}")
-                if on_track:
-                    on_track(track, "Not selected")
+                status = "Not selected"
             else:
-                print(f"Queueing download: {track.index:03d} - {artists_to_text(track.artists)} - {track.title}")
                 pending_downloads.append(track)
-                if on_track:
-                    on_track(track, "Queued")
-
-            if track not in pending_downloads:
-                save_manifest(
-                    manifest_path,
-                    playlist_id,
-                    known_tracks,
-                    playlist_title,
-                    previous_m3u8_filename,
-                )
+                status = "Queued"
+            initial_updates.append((track, status))
+            if on_track and on_batch is None:
+                on_track(track, status)
+            if status != "Queued":
                 success_count += 1
-        except Exception:  # Keep the playlist moving if one song fails.
+        except Exception as error:  # Keep the playlist moving if one song fails.
             failed_count += 1
             failed_tracks.append(track)
-            print(f"Failed: {track.index:03d} - {track.title} ({track.video_id})")
+            record_failure(track, error)
 
         if stop_after_video_id and track.video_id == stop_after_video_id:
             print(f"Stopping after requested test videoId: {stop_after_video_id}")
             break
 
+    # Persist the prepared playlist once, rather than rewriting it for every unchecked row.
+    save_manifest(manifest_path, playlist_id, known_tracks, playlist_title, previous_m3u8_filename)
+    if on_batch:
+        on_batch(initial_updates)
+    print(f"Prepared {len(pending_downloads)} downloads; reused {skipped_count} existing files; skipped {sum(status == 'Not selected' for _, status in initial_updates)} unchecked songs.")
     if pending_downloads:
+        selected_max_workers = max_workers if max_workers is not None else automatic_worker_count(len(pending_downloads))
         worker_count = max(1, min(selected_max_workers, len(pending_downloads)))
         print("")
         print(f"Downloading {len(pending_downloads)} queued tracks with {worker_count} workers...")
@@ -1118,7 +1157,7 @@ def sync_playlist(
                 if exc:
                     failed_count += 1
                     failed_tracks.append(track)
-                    print(f"Failed: {track.index:03d} - {track.title} ({track.video_id})")
+                    record_failure(track, exc)
                     if on_track:
                         on_track(track, "Failed")
                     continue
@@ -1145,7 +1184,7 @@ def sync_playlist(
                 if on_track:
                     on_track(track, "Downloaded")
 
-    write_download_errors(output_dir, failed_tracks)
+    write_download_errors(output_dir, failed_tracks, failure_reasons)
     failed_downloads_path = output_dir / FAILED_DOWNLOADS_NAME
     if failed_tracks:
         with failed_downloads_path.open("w", encoding="utf-8") as file:
@@ -1357,9 +1396,6 @@ def ensure_docker_desktop_running() -> bool:
 
 def ensure_po_provider_running() -> None:
     """Quietly start the optional bgutil PO-token provider when available."""
-    if not ensure_docker_desktop_running():
-        return
-
     container_name = "bgutil-provider"
     image_name = "brainicism/bgutil-ytdlp-pot-provider"
     ping_url = "http://127.0.0.1:4416/ping"
@@ -1371,6 +1407,10 @@ def ensure_po_provider_running() -> None:
         except Exception:
             return False
 
+    if provider_is_alive():
+        return
+    if not ensure_docker_desktop_running():
+        return
     if provider_is_alive():
         return
 
@@ -1392,10 +1432,11 @@ def ensure_po_provider_running() -> None:
                     "docker",
                     "run",
                     "-d",
+                    "--init",
                     "--name",
                     container_name,
                     "-p",
-                    "4416:4416",
+                    "127.0.0.1:4416:4416",
                     image_name,
                 ],
                 capture_output=True,

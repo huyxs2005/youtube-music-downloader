@@ -35,6 +35,21 @@ foreach ($File in @("ffmpeg.exe", "ffprobe.exe")) {
 }
 # Shared builds keep FFmpeg and FFprobe from carrying duplicate codec libraries.
 Get-ChildItem -LiteralPath $FfmpegDirectory -File -Filter '*.dll' | Copy-Item -Destination $ToolsTarget -Force
+# YouTube's challenge solver needs a JavaScript runtime on the host, not only inside Docker.
+$JsCache = Join-Path $ProjectRoot 'build\quickjs-ng-0.18.0'
+$JsExecutable = Join-Path $JsCache 'qjs.exe'
+$JsHash = 'ff03398d74ea6e6bd3a8e58058f7003225abcac229d7d57775b7aaae812a49c7'
+New-Item -ItemType Directory -Path $JsCache -Force | Out-Null
+if (-not (Test-Path -LiteralPath $JsExecutable) -or (Get-FileHash -LiteralPath $JsExecutable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $JsHash) {
+    Invoke-WebRequest -Uri 'https://github.com/quickjs-ng/quickjs/releases/download/v0.18.0/qjs-windows-x86_64.exe' -OutFile $JsExecutable
+}
+if ((Get-FileHash -LiteralPath $JsExecutable -Algorithm SHA256).Hash.ToLowerInvariant() -ne $JsHash) { throw 'JavaScript runtime checksum mismatch.' }
+Copy-Item -LiteralPath $JsExecutable -Destination $ToolsTarget -Force
+$JsLicense = Join-Path $JsCache 'QUICKJS_LICENSE.txt'
+if (-not (Test-Path -LiteralPath $JsLicense)) {
+    Invoke-WebRequest -Uri 'https://raw.githubusercontent.com/quickjs-ng/quickjs/v0.18.0/LICENSE' -OutFile $JsLicense
+}
+Copy-Item -LiteralPath $JsLicense -Destination $ToolsTarget -Force
 $FfmpegRoot = Split-Path $FfmpegDirectory
 foreach ($File in @("LICENSE", "LICENSE.txt", "README.txt", "ORIGIN.md")) {
     $LicensePath = Join-Path $FfmpegDirectory $File

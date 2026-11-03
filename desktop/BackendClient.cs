@@ -50,6 +50,7 @@ public sealed class BackendClient
         using var cancellation = cancellationToken.Register(() => {
             try { if (!process.HasExited) process.Kill(entireProcessTree: true); }
             catch (InvalidOperationException) { }
+            catch (System.ComponentModel.Win32Exception) { }
         });
         await process.StandardInput.WriteLineAsync(JsonSerializer.Serialize(request));
         process.StandardInput.Close();

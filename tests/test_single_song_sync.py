@@ -161,7 +161,8 @@ class SingleSongSyncTests(unittest.TestCase):
         error_text = (self.output_dir / downloader.DOWNLOAD_ERRORS_NAME).read_text(
             encoding="utf-8"
         )
-        self.assertEqual(error_text, downloader.failed_track_line(new_track) + "\n")
+        self.assertTrue(error_text.startswith(downloader.failed_track_line(new_track) + "\n"))
+        self.assertIn("Reason: failed", error_text)
         self.assertNotIn("RuntimeError", error_text)
         self.assertNotIn("Traceback", error_text)
 

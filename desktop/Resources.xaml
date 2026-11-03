@@ -30,6 +30,7 @@
     <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
    </Style>
    <Style x:Key="StatusTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SongText}">
+    <Setter Property="ToolTip" Value="{Binding StatusDescription}"/>
     <Style.Triggers>
      <DataTrigger Binding="{Binding Status}" Value="Downloaded"><Setter Property="Foreground" Value="#E5E5E5"/></DataTrigger>
      <DataTrigger Binding="{Binding Status}" Value="Downloading"><Setter Property="Foreground" Value="#FF6666"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger>

@@ -44,7 +44,28 @@ public sealed class SongRow : INotifyPropertyChanged
     private bool metadataChecked;
     public bool MetadataChecked { get => metadataChecked; set { metadataChecked = value; Changed(nameof(GenreText)); Changed(nameof(SizeText)); } }
     public string Status { get; set; } = "Missing";
-    public string StatusText => Status is "Missing" or "Not selected" ? "Not in selected playlist folder" : Status;
+    public double? DownloadPercent { get; private set; }
+    public string DownloadStage { get; private set; } = "Downloading";
+    public string? ErrorMessage { get; private set; }
+    public string StatusText => Status is "Missing" or "Not selected" ? "Not in selected playlist folder"
+        : Status == "Downloading" ? DownloadPercent.HasValue ? $"{DownloadStage} {DownloadPercent.Value:0}%" : DownloadStage + "…"
+        : Status;
+    public string StatusDescription => ErrorMessage ?? StatusText;
+    public void ApplyProgress(JsonElement element)
+    {
+        if (Status is "Downloaded" or "Failed") return;
+        Status = "Downloading";
+        DownloadPercent = element.TryGetProperty("percent", out var percent) && percent.ValueKind == JsonValueKind.Number
+            ? Math.Clamp(percent.GetDouble(), 0, 100) : null;
+        DownloadStage = element.TryGetProperty("stage", out var stage) ? stage.GetString() ?? "Downloading" : "Downloading";
+        Changed(nameof(StatusText)); Changed(nameof(StatusDescription));
+    }
+    public void ApplyError(string error)
+    {
+        Status = "Failed";
+        ErrorMessage = error;
+        Changed(nameof(StatusText)); Changed(nameof(StatusDescription));
+    }
     private bool selected = true;
     public bool IsSelected { get => selected; set { selected = value; Changed(); } }
     public string AlbumText => string.IsNullOrWhiteSpace(Album) || Album.Equals("Unknown", StringComparison.OrdinalIgnoreCase) ? "None" : Album;
@@ -74,6 +95,8 @@ public sealed class SongRow : INotifyPropertyChanged
     {
         var updated = element.Deserialize<SongRow>(BackendClient.JsonOptions)!;
         Status = updated.Status;
+        if (Status == "Queued") { DownloadPercent = null; DownloadStage = "Downloading"; ErrorMessage = null; }
+        if (Status == "Downloaded") { DownloadPercent = 100; ErrorMessage = null; }
         FileSize = updated.FileSize ?? FileSize;
         SizeEstimated = updated.FileSize != null ? updated.SizeEstimated : SizeEstimated;
         Duration = updated.Duration ?? Duration;

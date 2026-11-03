@@ -8,6 +8,15 @@ import ytmusic_downloader as downloader
 
 
 class QuietOptionalProviderTests(unittest.TestCase):
+    def test_running_provider_does_not_restart_or_wait_for_docker(self) -> None:
+        from unittest.mock import MagicMock
+        response = MagicMock()
+        response.__enter__.return_value.status = 200
+        with patch.object(downloader.urllib.request, "urlopen", return_value=response), \
+             patch.object(downloader, "ensure_docker_desktop_running") as start_docker:
+            downloader.ensure_po_provider_running()
+        start_docker.assert_not_called()
+
     def test_unavailable_optional_provider_prints_nothing(self) -> None:
         stdout = io.StringIO()
         stderr = io.StringIO()
@@ -22,13 +31,17 @@ class QuietOptionalProviderTests(unittest.TestCase):
         self.assertEqual(stdout.getvalue(), "")
         self.assertEqual(stderr.getvalue(), "")
 
-    def test_yt_dlp_logger_discards_token_provider_messages(self) -> None:
+    def test_yt_dlp_logger_keeps_actionable_errors_without_debug_noise(self) -> None:
         logger = downloader.QuietYtdlpLogger()
 
         self.assertIsNone(logger.debug("debug"))
         self.assertIsNone(logger.info("info"))
-        self.assertIsNone(logger.warning("token provider warning"))
-        self.assertIsNone(logger.error("docker token provider error"))
+        output = io.StringIO()
+        with redirect_stderr(output):
+            self.assertIsNone(logger.warning("token provider warning"))
+            self.assertIsNone(logger.error("docker token provider error"))
+        self.assertIn("token provider warning", output.getvalue())
+        self.assertIn("docker token provider error", output.getvalue())
 
     def test_concurrent_workers_initialize_yt_dlp_plugins_only_once(self) -> None:
         original_initialized = downloader._YT_DLP_PLUGINS_INITIALIZED

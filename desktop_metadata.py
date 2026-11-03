@@ -37,6 +37,7 @@ def fetch(track, cookies):
         options = dict(quiet=True, no_warnings=True, skip_download=True, noplaylist=True,
                        logger=engine.QuietYtdlpLogger(), socket_timeout=12, retries=0,
                        extractor_retries=0, remote_components=["ejs:github"],
+                       js_runtimes=engine.javascript_runtimes(),
                        format="bestaudio[acodec=opus]/bestaudio/best")
         # Let the downloader's normal client selection find an available audio stream.
         with engine.YoutubeDL(options) as ydl:

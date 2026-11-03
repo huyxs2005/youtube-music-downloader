@@ -4,15 +4,15 @@ A Windows desktop app for downloading YouTube and YouTube Music playlists as OPU
 
 ### 1. Download the Windows app
 
-**[Download YouTube Music Downloader v2.2.1 — Extract & open folder](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.1/YouTubeMusicDownloader-Desktop-v2.2.1-win-x64-extract.exe)**
+**[Download YouTube Music Downloader v2.2.2 — Extract & open folder](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.2/YouTubeMusicDownloader-Desktop-v2.2.2-win-x64-extract.exe)**
 
-Prefer a regular archive? Download the **[portable ZIP](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.1/YouTubeMusicDownloader-Desktop-v2.2.1-win-x64.zip)** instead. Both downloads contain the same app.
+Prefer a regular archive? Download the **[portable ZIP](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.2/YouTubeMusicDownloader-Desktop-v2.2.2-win-x64.zip)** instead. Both downloads contain the same app.
 
 Choose a Windows app download from [Releases](https://github.com/huyxs2005/youtube-music-downloader/releases/latest), not the automatically generated **Source code** downloads.
 
 The package includes the app, .NET runtime, Python download engine, FFmpeg, and FFprobe. **You do not need to install Python, .NET, Git, or FFmpeg separately. No CMD commands or BAT files are needed to open the app.**
 
-This package is for 64-bit Windows. The older v1.0 installer is the command-line edition; v2.2.1 is the WPF-UI desktop edition.
+This package is for 64-bit Windows. The older v1.0 installer is the command-line edition; v2.2.2 is the WPF-UI desktop edition.
 
 ### 2. Extract and open it
 
@@ -21,7 +21,7 @@ This package is for 64-bit Windows. The older v1.0 installer is the command-line
 3. Press **Extract**. When it finishes, the inner **YouTubeMusicDownloader-Desktop** folder opens automatically.
 4. Double-click **YouTubeMusicDownloader.Desktop.exe** inside that folder.
 
-For example, choosing `D:\` extracts to `D:\YouTubeMusicDownloader-Desktop-v2.2.1-win-x64\YouTubeMusicDownloader-Desktop` and opens that inner folder directly. The extractor does not start the app automatically.
+For example, choosing `D:\` extracts to `D:\YouTubeMusicDownloader-Desktop-v2.2.2-win-x64\YouTubeMusicDownloader-Desktop` and opens that inner folder directly. The extractor does not start the app automatically.
 
 **Using the ZIP instead:** right-click it, choose **Extract All**, then open **YouTubeMusicDownloader-Desktop** inside the destination. Windows decides which folder opens after ZIP extraction; the optional extractor above opens the inner app folder for you.
 
@@ -37,7 +37,7 @@ YouTubeMusicDownloader-Desktop/
 
 Keep the `app` subfolder beside the EXE. The root EXE is a small launcher using the .NET Framework included with supported Windows versions. The app's own runtime, download engine, tools, licenses, and this guide stay inside `app`. Your private `cookies.txt` can stay beside the launcher.
 
-The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.1/YouTubeMusicDownloader-Desktop-v2.2.1-win-x64.zip.sha256) is provided with the release.
+The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.2.2/YouTubeMusicDownloader-Desktop-v2.2.2-win-x64.zip.sha256) is provided with the release.
 
 ### 3. Add your cookies.txt file
 
@@ -115,6 +115,10 @@ Click a song thumbnail to open a larger preview. Close it with **Close**, **Esc*
 After scanning, setup collapses so the song table has more room. Click the **Playlist setup** section heading to open or close the setup form.
 
 The **Downloads** tab shows the current queue, remaining count, and downloaded/failed totals. Use its status filter to focus on **Downloading**, **Queued**, or **Failed** songs. You can browse, scroll, and sort while downloads run. Song selection is locked until the sync finishes.
+
+The Status column shows real transfer percentages, such as **Downloading 37%**. **Processing 100%** means the audio transfer is complete and conversion/tagging is still finishing; the row changes to **Downloaded** afterward. Hover over a failed status for its reason, or read Activity and the playlist folder's `download_errors.log`.
+
+Large playlists prepare their manifest and initial statuses in batches. Unchecked songs are not downloaded, and background metadata fetching pauses when a download starts.
 
 ### Updating a playlist
 
@@ -203,12 +207,13 @@ Keep your existing music folders and manifests. You do not need to clone the rep
 | Container name already exists | Use `docker start bgutil-provider` instead of creating it again. |
 | Docker is unavailable | Open Docker Desktop, wait for its engine, and check `docker info`. |
 | Existing songs appear missing | Choose the original playlist folder and keep its audio and manifest together. |
+| Older releases fail with Docker server 2.x | Upgrade to v2.2.2 or later. The token-provider plugin must match the server's major version; v2.2.2 bundles plugin 2.0.2 and a JavaScript runtime for YouTube. |
 | Files cannot be written | Extract the app and choose a music folder in a writable location outside `Program Files`. |
 
 To check the ZIP's checksum, open CMD in the folder containing your download and run:
 
 ```cmd
-certutil -hashfile YouTubeMusicDownloader-Desktop-v2.2.1-win-x64.zip SHA256
+certutil -hashfile YouTubeMusicDownloader-Desktop-v2.2.2-win-x64.zip SHA256
 ```
 
 Compare the result with the release's `.sha256` file.
@@ -241,8 +246,8 @@ Close the source-build app and run these commands from the project folder in CMD
 
 ```cmd
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-desktop.ps1" -Python ".\.venv\Scripts\python.exe"
-.venv\Scripts\python.exe installer\package-desktop.py dist\YouTubeMusicDownloader-Desktop --version 2.2.1
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-extractor.ps1" -ArchivePath ".\dist\releases\YouTubeMusicDownloader-Desktop-v2.2.1-win-x64.zip"
+.venv\Scripts\python.exe installer\package-desktop.py dist\YouTubeMusicDownloader-Desktop --version 2.2.2
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-extractor.ps1" -ArchivePath ".\dist\releases\YouTubeMusicDownloader-Desktop-v2.2.2-win-x64.zip"
 ```
 
 FFmpeg and FFprobe must be on `PATH`. A shared FFmpeg build reduces the installed size; its DLLs are copied with the tools. Alternatively, add `-FfmpegDirectory "C:\ffmpeg\bin"` to the build command, using your actual FFmpeg folder. The ZIP and checksum are written to `dist\releases`. Packaging includes only the launcher and `app` subfolder; private cookies and downloaded playlist folders beside the EXE are excluded. It refuses private files inside `app`.

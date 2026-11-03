@@ -237,8 +237,8 @@ class PowerampM3U8Tests(unittest.TestCase):
             error_text = (output_dir / downloader.DOWNLOAD_ERRORS_NAME).read_text(
                 encoding="utf-8"
             )
-            self.assertEqual(error_text, downloader.failed_track_line(track) + "\n")
-            self.assertNotIn("download failed", error_text)
+            self.assertTrue(error_text.startswith(downloader.failed_track_line(track) + "\n"))
+            self.assertIn("Reason: download failed", error_text)
             self.assertFalse(old_playlist.exists())
             self.assertTrue(unrelated_playlist.exists())
 

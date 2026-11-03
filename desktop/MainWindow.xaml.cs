@@ -24,6 +24,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private ListCollectionView? view;
     private ListCollectionView? downloadView;
     private readonly HashSet<string> downloadSession = [];
+    private readonly Dictionary<string, List<SongRow>> songLookup = new();
     private bool showingDownloads;
     private JsonElement? snapshot;
     private bool busy;
@@ -314,6 +315,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 CheckCookies();
                 foreach (var song in songs) song.PropertyChanged -= SongChanged;
                 songs.Clear();
+                songLookup.Clear();
                 downloadSession.Clear();
                 foreach (var item in snapshot.Value.GetProperty("rows").EnumerateArray()) {
                     var song = item.Deserialize<SongRow>(BackendClient.JsonOptions)!;
@@ -321,6 +323,8 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                     song.CustomPosition = song.Position;
                     song.PropertyChanged += SongChanged;
                     songs.Add(song);
+                    if (!songLookup.TryGetValue(song.VideoId, out var matchingRows)) songLookup[song.VideoId] = matchingRows = [];
+                    matchingRows.Add(song);
                 }
                 PlaylistTitle.Text = snapshot.Value.GetProperty("title").GetString();
                 loadingOrder = true;
@@ -340,9 +344,36 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
                 Progress.Value = 0;
                 UpdateCounts();
                 break;
+            case "track_progress":
+                if (songLookup.TryGetValue(element.GetProperty("videoId").GetString()!, out var progressing))
+                    foreach (var song in progressing) song.ApplyProgress(element);
+                break;
+            case "track_error":
+                string failedId = element.GetProperty("videoId").GetString()!;
+                string failure = element.GetProperty("error").GetString()!;
+                if (songLookup.TryGetValue(failedId, out var failedRows))
+                    foreach (var song in failedRows) song.ApplyError(failure);
+                Log("Download failed: " + failure);
+                break;
+            case "tracks":
+                updatingSelection = true;
+                try {
+                    foreach (var update in element.GetProperty("updates").EnumerateArray()) {
+                        string updateId = update.GetProperty("videoId").GetString()!;
+                        if (songLookup.TryGetValue(updateId, out var updatedRows))
+                            foreach (var song in updatedRows) song.Apply(update);
+                        string updatedStatus = update.GetProperty("status").GetString()!;
+                        if (updatedStatus is "Downloaded" or "Failed" or "Not selected") pending.Remove(updateId);
+                    }
+                } finally { updatingSelection = false; }
+                view?.Refresh(); downloadView?.Refresh(); UpdateCounts();
+                break;
             case "track":
                 var id = element.GetProperty("videoId").GetString()!;
-                foreach (var song in songs.Where(song => song.VideoId == id)) song.Apply(element);
+                updatingSelection = true;
+                try {
+                    if (songLookup.TryGetValue(id, out var matching)) foreach (var song in matching) song.Apply(element);
+                } finally { updatingSelection = false; }
                 string status = element.GetProperty("status").GetString()!;
                 if (status is "Downloaded" or "Failed" or "Not selected") pending.Remove(id);
                 Progress.Value = pendingTotal == 0 ? 100 : 100d * (pendingTotal - pending.Count) / pendingTotal;
@@ -362,7 +393,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             case "log": StatusText.Text = element.GetProperty("message").GetString(); break;
         }
     }
-    private void SongChanged(object? sender, PropertyChangedEventArgs e) { if (!updatingSelection) UpdateCounts(); }
+    private void SongChanged(object? sender, PropertyChangedEventArgs e) {
+        if (!updatingSelection && (string.IsNullOrEmpty(e.PropertyName) || e.PropertyName == nameof(SongRow.IsSelected))) UpdateCounts();
+    }
     private void Log(string text)
     {
         // Keep long sessions responsive without growing an unbounded log.
@@ -390,6 +423,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             InvalidateScan(); StatusText.Text = "The URL changed. Scan the playlist again before downloading."; return;
         }
         if (!CheckCookies()) { StatusText.Text = CookieStatus.Text; return; }
+        metadataCancellation?.Cancel();
         string cookies = CookiesInput.Text;
         string[] selected = songs.Where(song => song.IsSelected).Select(song => song.VideoId).Distinct().ToArray();
         downloadSession.Clear();

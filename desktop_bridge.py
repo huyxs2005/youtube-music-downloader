@@ -145,7 +145,9 @@ def download(request: dict) -> None:
         if engine.safe_manifest_filename(track.filename, ".opus") != track.filename:
             raise ValueError("Invalid audio filename. Scan again.")
     selected = set(request.get("selected", []))
-    options = engine.DownloadOptions(cookies_file=validate_cookies(request.get("cookies")))
+    options = engine.DownloadOptions(cookies_file=validate_cookies(request.get("cookies")),
+        on_progress=lambda track, percent, stage: emit("track_progress", videoId=track.video_id, percent=percent, stage=stage),
+        on_error=lambda track, reason: emit("track_error", videoId=track.video_id, error=reason))
     missing_selected = any(t.video_id in selected and not (folder / t.filename).is_file() for t in tracks)
     if missing_selected:
         engine.check_ffmpeg()
@@ -153,10 +155,14 @@ def download(request: dict) -> None:
         engine.ensure_po_provider_running()
     def progress(track, status):
         emit("track", **{**row(track, folder), "status": status})
+    def batch(updates):
+        emit("tracks", updates=[dict(videoId=track.video_id, status=status) for track, status in updates])
     if snapshot["single"]:
         if tracks[0].video_id not in selected:
             emit("done", result=0, message="Song not selected; playlist unchanged.")
             return
+        if missing_selected:
+            progress(tracks[0], "Downloading")
         code = engine.sync_single_track(url, folder, options)
         progress(tracks[0], "Downloaded" if (folder / tracks[0].filename).is_file() else "Failed")
     else:
@@ -165,7 +171,7 @@ def download(request: dict) -> None:
         code = engine.sync_playlist(url, folder, options,
             selected_video_ids=selected,
             prepared_playlist=(snapshot["playlistId"], snapshot["title"], snapshot["total"], tracks, snapshot["skipped"]),
-            on_track=progress, custom_order=request.get("customOrder"))
+            on_track=progress, custom_order=request.get("customOrder"), on_batch=batch)
     emit("done", result=code, message="Sync complete." if code == 0 else "Sync finished with failed songs. Select Retry failed to try again.")
 
 

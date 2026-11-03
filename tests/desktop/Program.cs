@@ -82,6 +82,15 @@ internal static class Program
                 Check(songs.Count == 3,"Scan should load all rows");
                 Check(songs[0].AlbumText=="None","Missing albums should display None");
                 Check(songs[2].StatusText=="Not in selected playlist folder","Missing local audio should have an explicit status");
+                Call(window,"HandleEvent",JsonSerializer.SerializeToElement(new {type="tracks",updates=new[]{new {videoId="a",status="Queued"},new {videoId="b",status="Not selected"}}}));
+                Check(songs[0].Status=="Queued" && songs[1].Status=="Not selected","Initial download statuses should apply as a batch");
+                Call(window,"HandleEvent",JsonSerializer.SerializeToElement(new {type="track_progress",videoId="a",percent=37.0,stage="Downloading"}));
+                Check(songs[0].StatusText=="Downloading 37%","Downloading rows should show actual transfer percentages");
+                Call(window,"HandleEvent",JsonSerializer.SerializeToElement(new {type="track_progress",videoId="a",percent=100.0,stage="Processing"}));
+                Check(songs[0].StatusText=="Processing 100%","Transfer completion should distinguish audio processing from a finished song");
+                Call(window,"HandleEvent",JsonSerializer.SerializeToElement(new {type="track_error",videoId="a",error="HTTP 403: fixture failure"}));
+                Check(songs[0].Status=="Failed" && songs[0].StatusDescription.Contains("HTTP 403"),"Failed rows should retain the actionable reason in their tooltip");
+                Call(window,"HandleEvent",JsonSerializer.SerializeToElement(new {type="tracks",updates=new[]{new {videoId="a",status="Downloaded"},new {videoId="b",status="Downloaded"}}}));
                 Check(grid.Columns.Any(c=>c.Header as string=="Thumbnail") && !grid.Columns.Any(c=>c.SortMemberPath=="Genre"),"Thumbnail should replace genre in the table");
                 Call(window,"HandleEvent",JsonSerializer.SerializeToElement(new {type="scan_progress",detected=120,unavailable=8}));
                 Check(Field<TextBlock>(window,"StatusText").Text.Contains("120 songs detected") && Field<TextBlock>(window,"StatusText").Text.Contains("8 unavailable"),"Live scan counters should display real counts");
