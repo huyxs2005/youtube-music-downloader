@@ -95,12 +95,49 @@ class DesktopSelectionTests(unittest.TestCase):
             bridge.resolve_folder(self.folder, "PL-test", "My Playlist")
 
     def test_scan_is_read_only_and_exposes_numeric_metadata(self):
-        with patch.object(engine, "fetch_playlist_tracks", return_value=self.prepared):
+        with patch.object(engine, "fetch_playlist_tracks", return_value=self.prepared), patch.object(bridge, "emit"):
             result = bridge.scan(dict(url=self.url, folder=str(self.folder)))
         self.assertEqual(result["rows"][0]["duration"], 121)
-        self.assertIsNone(result["rows"][0]["fileSize"])
+        self.assertIsInstance(result["rows"][0]["fileSize"], int)
+        self.assertGreater(result["rows"][0]["fileSize"], 0)
+        self.assertTrue(result["rows"][0]["sizeEstimated"])
         self.assertIsNone(result["rows"][0]["genre"])
         self.assertFalse(Path(result["folder"]).exists())
+
+    def test_custom_order_keeps_existing_unchecked_audio_and_can_return_to_youtube_order(self):
+        for song in self.tracks:
+            (self.folder / song.filename).write_bytes(b"existing")
+        with contextlib.redirect_stdout(io.StringIO()), patch.object(engine, "download_track_job") as download:
+            code = engine.sync_playlist(self.url, self.folder, engine.DownloadOptions(),
+                selected_video_ids=set(), prepared_playlist=self.prepared, custom_order=["c", "a"])
+            self.assertEqual(code, 0)
+            self.assertEqual(self.playlist_files(), [self.tracks[i].filename for i in (2, 0, 1)])
+            self.assertEqual(engine.load_manifest(self.folder / engine.MANIFEST_NAME)["custom_order"], ["c", "a"])
+            engine.sync_playlist(self.url, self.folder, engine.DownloadOptions(),
+                selected_video_ids=set(), prepared_playlist=self.prepared)
+            self.assertEqual(self.playlist_files(), [song.filename for song in self.tracks])
+            self.assertEqual(engine.load_manifest(self.folder / engine.MANIFEST_NAME)["custom_order"], [])
+            download.assert_not_called()
+
+    def test_scan_progress_counts_real_rows_and_ignores_continuation_buttons(self):
+        from playlist_progress import ProgressYTMusic
+        client = object.__new__(ProgressYTMusic)
+        counts = []
+        client.report = lambda songs, unavailable: counts.append((songs, unavailable))
+        client.progress_items, client.progress_reliable = [], True
+        client.detected = client.unavailable = 0
+        items = [{"musicResponsiveListItemRenderer": song} for song in (
+            {"videoId": "a"}, {"videoId": None}, {"videoId": "b", "isAvailable": False}, {"videoId": "c"})]
+        items.insert(2, {"continuationItemRenderer": {}})
+        response = {"onResponseReceivedActions": [{"appendContinuationItemsAction": {"continuationItems": items}}]}
+        with patch.object(engine.YTMusic, "_send_request", return_value=response), \
+             patch("playlist_progress.parse_playlist_items", side_effect=lambda rows: [rows[0]["musicResponsiveListItemRenderer"]]):
+            self.assertIs(client._send_request("browse", {}), response)
+        self.assertEqual(counts, [(1, 0), (1, 1), (1, 2), (2, 2)])
+        self.assertEqual(len(client.progress_items), 4)
+
+    def test_unavailable_song_with_video_id_is_skipped(self):
+        self.assertIsNone(engine.track_from_ytmusic({"videoId": "blocked", "title": "Unavailable", "isAvailable": False}, 1))
 
     def test_backend_refuses_changed_playlist_folder(self):
         engine.save_manifest(self.folder / engine.MANIFEST_NAME, "other", {}, "Other")

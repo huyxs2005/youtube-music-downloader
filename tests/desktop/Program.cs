@@ -80,6 +80,11 @@ internal static class Program
                 var view = Field<ListCollectionView>(window,"view");
                 var grid = Field<Wpf.Ui.Controls.DataGrid>(window,"SongGrid");
                 Check(songs.Count == 3,"Scan should load all rows");
+                Check(songs[0].AlbumText=="None","Missing albums should display None");
+                Check(songs[2].StatusText=="Not in selected playlist folder","Missing local audio should have an explicit status");
+                Check(grid.Columns.Any(c=>c.Header as string=="Thumbnail") && !grid.Columns.Any(c=>c.SortMemberPath=="Genre"),"Thumbnail should replace genre in the table");
+                Call(window,"HandleEvent",JsonSerializer.SerializeToElement(new {type="scan_progress",detected=120,unavailable=8}));
+                Check(Field<TextBlock>(window,"StatusText").Text.Contains("120 songs detected") && Field<TextBlock>(window,"StatusText").Text.Contains("8 unavailable"),"Live scan counters should display real counts");
                 window.UpdateLayout();
                 Check(!Field<Expander>(window,"SetupSection").IsExpanded,"Scan should collapse setup to expand the song list");
                 await Task.Delay(400); // Allow the setup section's collapse animation to finish.
@@ -104,6 +109,15 @@ internal static class Program
                 resizeHandle.RaiseEvent(new DragCompletedEventArgs(40,0,false){RoutedEvent=Thumb.DragCompletedEvent});
                 window.UpdateLayout();
                 Check(titleColumn.ActualWidth>oldWidth,"Dragging the header gripper should widen the column");
+                var baseline=grid.Columns.Where(c=>c.Visibility==Visibility.Visible).ToDictionary(c=>c,c=>c.ActualWidth);
+                double requestedWidth=oldWidth+2000;
+                Call(window,"ResizeColumnTo",titleColumn,requestedWidth,baseline);
+                window.UpdateLayout();
+                Check(titleColumn.Width.Value>=requestedWidth,"Column widths should support expansion beyond the viewport");
+                Call(window,"AutoFitColumn",titleColumn);
+                window.UpdateLayout();
+                Check(titleColumn.Width.Value<requestedWidth && titleColumn.Width.Value>=titleColumn.MinWidth,"Auto-fit should restore a content-sized column");
+                foreach(var item in baseline) item.Key.Width=new DataGridLength(item.Value);
                 foreach (string property in new[]{"Title","Artist","Album","Duration","Position","FileSize"}) {
                     var column = grid.Columns.Single(c=>c.SortMemberPath==property);
                     Call(window,"SetSort","Status",ListSortDirection.Ascending);
@@ -164,6 +178,15 @@ internal static class Program
                 Check(((ListCollectionView)grid.ItemsSource).Count==2,"Downloads should contain only songs from this download");
                 Call(window,"ShowPage",false);
                 Check(((ListCollectionView)grid.ItemsSource).Count==3,"Library should retain unchecked songs after viewing Downloads");
+                Call(window,"SetSort","Title",ListSortDirection.Ascending);
+                Field<CheckBox>(window,"CustomOrderToggle").IsChecked=true;
+                Check(!grid.CanUserSortColumns && view.Cast<SongRow>().First().VideoId=="b","Custom order should start from the displayed arrangement and lock column sorting");
+                await (Task)Call(window,"DownloadAsync")!;
+                playlist=File.ReadAllLines(Path.Combine(temp,"Desktop verification.m3u8")).Where(l=>l.Length>0 && !l.StartsWith('#')).ToArray();
+                Check(playlist.SequenceEqual(new[]{"b.opus","a.opus"}),"Custom display order must reach the frozen engine and saved M3U8");
+                Call(window,"ShowPage",false);
+                Field<CheckBox>(window,"CustomOrderToggle").IsChecked=false;
+                Check(grid.CanUserSortColumns && view.Cast<SongRow>().First().VideoId=="a","Disabling custom order should restore YouTube order and column sorting");
                 File.WriteAllText(report,$"PASS: {checks} WPF and bridge checks.");
                 verified = true;
                 if (args.Contains("--large")) {

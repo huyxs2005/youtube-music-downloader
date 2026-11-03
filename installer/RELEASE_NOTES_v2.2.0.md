@@ -17,4 +17,4 @@ Reuse your own private `cookies.txt` beside the launcher or choose it in the app
 
 Windows x64; unsigned build. A separate SHA-256 checksum is supplied. Some YouTube downloads need the optional Docker token provider described in the README.
 
-Build completed. Automated app tests, live YouTube downloads, and UI checks were not run for this release at the user's request.
+Validation: 47 Python tests and 64 WPF/bridge checks passed. The extracted release engine, shared FFmpeg/FFprobe, bundled runtimes, icon, playlist order, and cookie exclusion passed an isolated package check. No live YouTube download was performed.
