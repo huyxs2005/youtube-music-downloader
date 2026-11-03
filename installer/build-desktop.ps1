@@ -37,7 +37,8 @@ foreach ($File in @("ffmpeg.exe", "ffprobe.exe")) {
 Get-ChildItem -LiteralPath $FfmpegDirectory -File -Filter '*.dll' | Copy-Item -Destination $ToolsTarget -Force
 $FfmpegRoot = Split-Path $FfmpegDirectory
 foreach ($File in @("LICENSE", "LICENSE.txt", "README.txt", "ORIGIN.md")) {
-    $LicensePath = Join-Path $FfmpegRoot $File
+    $LicensePath = Join-Path $FfmpegDirectory $File
+    if (-not (Test-Path -LiteralPath $LicensePath)) { $LicensePath = Join-Path $FfmpegRoot $File }
     if (Test-Path -LiteralPath $LicensePath) { Copy-Item -LiteralPath $LicensePath -Destination $ToolsTarget -Force }
 }
 $WpfLicense = Join-Path $ProjectRoot "desktop\THIRD_PARTY_NOTICES.txt"

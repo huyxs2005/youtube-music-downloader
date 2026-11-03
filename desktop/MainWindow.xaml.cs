@@ -11,6 +11,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Media.Animation;
+using System.Windows.Threading;
 using Microsoft.Win32;
 
 namespace YouTubeMusicDownloader.Desktop;
@@ -43,6 +44,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private bool loadingOrder;
     private bool sidebarExpanded = true;
     private CancellationTokenSource? previewCancellation;
+    private List<SongRow>? selectionSweepRows;
+    private Dictionary<SongRow, bool>? selectionSweepOriginal;
+    private int selectionSweepAnchor;
+    private bool selectionSweepValue;
+    private readonly DispatcherTimer selectionScrollTimer = new() { Interval = TimeSpan.FromMilliseconds(70) };
 
     public MainWindow()
     {
@@ -53,6 +59,10 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         notifications.SetSnackbarPresenter(Notifications);
         UrlInput.TextChanged += (_, _) => UrlInput.ClearValue(Control.BorderBrushProperty);
         PreviewKeyDown += (_, e) => {
+            if (e.Key == Key.Escape && selectionSweepRows != null) {
+                EndSelectionSweep();
+                e.Handled = true;
+            }
             if (e.Key == Key.Escape && ThumbnailPreview.Visibility == Visibility.Visible) {
                 CloseThumbnailPreview();
                 e.Handled = true;
@@ -62,6 +72,15 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         downloadView = new ListCollectionView(songs) { Filter = item => downloadSession.Contains(((SongRow)item).VideoId) && MatchesFilter(item) };
         Tag = true;
         SongGrid.ItemsSource = view;
+        SongGrid.PreviewMouseLeftButtonDown += BeginSelectionSweep;
+        SongGrid.PreviewMouseMove += ContinueSelectionSweep;
+        SongGrid.PreviewMouseLeftButtonUp += (_, e) => {
+            if (selectionSweepRows == null) return;
+            EndSelectionSweep();
+            e.Handled = true;
+        };
+        SongGrid.LostMouseCapture += (_, _) => EndSelectionSweep();
+        selectionScrollTimer.Tick += (_, _) => ScrollSelectionSweep();
         SongGrid.AddHandler(Thumb.DragDeltaEvent, new DragDeltaEventHandler(ResizeColumn), true);
         SongGrid.PreviewMouseLeftButtonDown += BeginColumnResize;
         SongGrid.PreviewMouseMove += ContinueColumnResize;
@@ -114,6 +133,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private void Downloads_Click(object sender, RoutedEventArgs e) => ShowPage(true);
     private void ShowPage(bool downloads)
     {
+        EndSelectionSweep();
         showingDownloads = downloads;
         SongGrid.ItemsSource = ActiveView;
         SongGrid.Columns[0].Visibility = downloads ? Visibility.Collapsed : Visibility.Visible;
@@ -352,6 +372,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     }
     private void SetBusy(bool value)
     {
+        if (value) EndSelectionSweep();
         busy = value;
         Tag = !value;
         Inputs.IsEnabled = !value;
@@ -500,6 +521,75 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     {
         if (ReferenceEquals(e.OriginalSource, sender)) CloseThumbnailPreview();
     }
+    private void BeginSelectionSweep(object sender, MouseButtonEventArgs e)
+    {
+        if (busy || showingDownloads || e.Handled || ParentOf<CheckBox>(e.OriginalSource as DependencyObject) == null) return;
+        if (ParentOf<DataGridRow>(e.OriginalSource as DependencyObject)?.Item is not SongRow song) return;
+        StartSelectionSweep(song);
+        Mouse.Capture(SongGrid, CaptureMode.SubTree);
+        selectionScrollTimer.Start();
+        e.Handled = true;
+    }
+    private void StartSelectionSweep(SongRow song)
+    {
+        if (busy || showingDownloads || view == null) return;
+        selectionSweepRows = view.Cast<SongRow>().ToList();
+        selectionSweepAnchor = selectionSweepRows.IndexOf(song);
+        if (selectionSweepAnchor < 0) { EndSelectionSweep(); return; }
+        selectionSweepOriginal = selectionSweepRows.ToDictionary(row => row, row => row.IsSelected);
+        selectionSweepValue = !song.IsSelected;
+        ApplySelectionSweep(song);
+    }
+    private void ApplySelectionSweep(SongRow target)
+    {
+        if (selectionSweepRows == null || selectionSweepOriginal == null || busy) return;
+        int end = selectionSweepRows.IndexOf(target);
+        if (end < 0) return;
+        int first = Math.Min(selectionSweepAnchor, end), last = Math.Max(selectionSweepAnchor, end);
+        updatingSelection = true;
+        try {
+            for (int index = 0; index < selectionSweepRows.Count; index++) {
+                var row = selectionSweepRows[index];
+                bool value = index >= first && index <= last ? selectionSweepValue : selectionSweepOriginal[row];
+                if (row.IsSelected != value) row.IsSelected = value;
+            }
+        } finally { updatingSelection = false; UpdateCounts(); }
+    }
+    private void ContinueSelectionSweep(object sender, MouseEventArgs e)
+    {
+        if (selectionSweepRows == null) return;
+        if (e.LeftButton != MouseButtonState.Pressed) { EndSelectionSweep(); return; }
+        SelectSweepAtPointer();
+        e.Handled = true;
+    }
+    private void SelectSweepAtPointer()
+    {
+        var point = Mouse.GetPosition(SongGrid);
+        point.X = Math.Clamp(point.X, 1, Math.Max(1, SongGrid.ActualWidth - 18));
+        point.Y = Math.Clamp(point.Y, 48, Math.Max(48, SongGrid.ActualHeight - 20));
+        if (ParentOf<DataGridRow>(SongGrid.InputHitTest(point) as DependencyObject)?.Item is SongRow song)
+            ApplySelectionSweep(song);
+    }
+    private void ScrollSelectionSweep()
+    {
+        if (selectionSweepRows == null || busy || showingDownloads || Mouse.LeftButton != MouseButtonState.Pressed) {
+            EndSelectionSweep(); return;
+        }
+        var point = Mouse.GetPosition(SongGrid);
+        if (SongGrid.Template.FindName("DG_ScrollViewer", SongGrid) is ScrollViewer scroll) {
+            if (point.Y < 62) scroll.LineUp();
+            else if (point.Y > SongGrid.ActualHeight - 32) scroll.LineDown();
+        }
+        SelectSweepAtPointer();
+    }
+    private void EndSelectionSweep()
+    {
+        selectionScrollTimer.Stop();
+        if (selectionSweepRows == null) return;
+        selectionSweepRows = null;
+        selectionSweepOriginal = null;
+        if (Mouse.Captured == SongGrid) Mouse.Capture(null);
+    }
     private void BeginRowDrag(object sender, MouseButtonEventArgs e)
     {
         draggedSong = null;
@@ -646,6 +736,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
     private void ResetSort_Click(object sender, RoutedEventArgs e) => SetSort("Position", ListSortDirection.Ascending);
     private void Window_Closing(object? sender, CancelEventArgs e)
     {
+        EndSelectionSweep();
         if (!busy) metadataCancellation?.Cancel();
         if (!busy) return;
         e.Cancel = true;

@@ -106,7 +106,7 @@
          <DataGridTemplateColumn.Header>
           <ui:Button x:Name="HeaderSelectionButton" Content="+" Appearance="Primary" Width="30" Height="28" MinWidth="0" MinHeight="0" Padding="0" FontFamily="Segoe UI Symbol" FontSize="17" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center" Click="HeaderSelection_Click" ToolTip="Select all songs" AutomationProperties.Name="Select all songs" IsEnabled="False"/>
          </DataGridTemplateColumn.Header>
-         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox Foreground="White" IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Download this song"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox Foreground="White" IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Click to toggle. Hold and drag up or down to select or clear a range."/></DataTemplate></DataGridTemplateColumn.CellTemplate>
         </DataGridTemplateColumn>
         <DataGridTextColumn Header="No." Binding="{Binding Position}" ElementStyle="{StaticResource SongText}" SortMemberPath="Position" Width="64" MinWidth="40" IsReadOnly="True"/>
         <DataGridTemplateColumn Header="Thumbnail" Width="100" MinWidth="100" CanUserSort="False" IsReadOnly="True">

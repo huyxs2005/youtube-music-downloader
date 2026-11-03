@@ -10,7 +10,7 @@ import zipfile
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("folder", type=Path)
-    parser.add_argument("--version", default="2.2.0")
+    parser.add_argument("--version", default="2.2.1")
     parser.add_argument("--output", type=Path, default=Path("dist/releases"))
     args = parser.parse_args()
     folder = args.folder.resolve()
