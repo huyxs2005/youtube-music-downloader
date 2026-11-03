@@ -36,6 +36,9 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
 
     public MainWindow()
     {
+        Wpf.Ui.Appearance.ApplicationAccentColorManager.Apply(
+            Color.FromRgb(255, 0, 0), Color.FromRgb(255, 0, 0),
+            Color.FromRgb(204, 0, 0), Color.FromRgb(255, 82, 82));
         InitializeComponent();
         view = new ListCollectionView(songs) { Filter = MatchesFilter };
         downloadView = new ListCollectionView(songs) { Filter = item => downloadSession.Contains(((SongRow)item).VideoId) && MatchesFilter(item) };
@@ -133,7 +136,7 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
         cookiesValid = result.IsValid;
         CookieStatus.Text = (result.IsValid && !cookiesManuallyChosen ? "Auto-detected · " : "") + result.Message;
         CookieStatus.Foreground = new System.Windows.Media.SolidColorBrush(result.IsValid
-            ? System.Windows.Media.Color.FromRgb(164,232,181) : System.Windows.Media.Color.FromRgb(244,190,126));
+            ? System.Windows.Media.Color.FromRgb(229,229,229) : System.Windows.Media.Color.FromRgb(255,146,146));
         DownloadButton.IsEnabled = !busy && snapshot.HasValue && cookiesValid;
         RetryButton.IsEnabled = !busy && cookiesValid && songs.Any(s => s.Status == "Failed");
         return cookiesValid;

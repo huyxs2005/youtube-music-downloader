@@ -3,35 +3,37 @@
     <ui:ThemesDictionary Theme="Dark" />
     <ui:ControlsDictionary />
    </ResourceDictionary.MergedDictionaries>
-   <SolidColorBrush x:Key="AccentBrush" Color="#A4E8B5" />
-   <Style x:Key="Muted" TargetType="TextBlock"><Setter Property="Foreground" Value="#9DA6A4" /></Style>
+   <SolidColorBrush x:Key="AccentBrush" Color="#FF0000" />
+   <SolidColorBrush x:Key="TextOnAccentFillColorPrimaryBrush" Color="White" />
+   <SolidColorBrush x:Key="TextOnAccentFillColorSecondaryBrush" Color="White" />
+   <Style x:Key="Muted" TargetType="TextBlock"><Setter Property="Foreground" Value="#AAAAAA" /></Style>
    <Style x:Key="SongText" TargetType="TextBlock">
     <Setter Property="TextTrimming" Value="CharacterEllipsis"/><Setter Property="VerticalAlignment" Value="Center"/><Setter Property="Margin" Value="12,0"/>
     <Setter Property="ToolTip" Value="{Binding Text, RelativeSource={RelativeSource Self}}"/>
    </Style>
    <Style x:Key="StatusTextStyle" TargetType="TextBlock" BasedOn="{StaticResource SongText}">
     <Style.Triggers>
-     <DataTrigger Binding="{Binding Status}" Value="Downloaded"><Setter Property="Foreground" Value="#A4E8B5"/></DataTrigger>
-     <DataTrigger Binding="{Binding Status}" Value="Downloading"><Setter Property="Foreground" Value="#9BD8FC"/></DataTrigger>
-     <DataTrigger Binding="{Binding Status}" Value="Queued"><Setter Property="Foreground" Value="#AEBAB1"/></DataTrigger>
-     <DataTrigger Binding="{Binding Status}" Value="Failed"><Setter Property="Foreground" Value="#FFB0A6"/></DataTrigger>
+     <DataTrigger Binding="{Binding Status}" Value="Downloaded"><Setter Property="Foreground" Value="#E5E5E5"/></DataTrigger>
+     <DataTrigger Binding="{Binding Status}" Value="Downloading"><Setter Property="Foreground" Value="#FF6666"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger>
+     <DataTrigger Binding="{Binding Status}" Value="Queued"><Setter Property="Foreground" Value="#AAAAAA"/></DataTrigger>
+     <DataTrigger Binding="{Binding Status}" Value="Failed"><Setter Property="Foreground" Value="#FF9999"/><Setter Property="FontWeight" Value="SemiBold"/></DataTrigger>
     </Style.Triggers>
    </Style>
    <Style x:Key="Panel" TargetType="Border">
-    <Setter Property="Background" Value="#1B2221"/><Setter Property="BorderBrush" Value="#303A37"/>
+    <Setter Property="Background" Value="#181818"/><Setter Property="BorderBrush" Value="#303030"/>
     <Setter Property="BorderThickness" Value="1"/><Setter Property="CornerRadius" Value="12"/>
     <Setter Property="Padding" Value="18"/>
    </Style>
    <Style TargetType="DataGridColumnHeader" BasedOn="{StaticResource {x:Type DataGridColumnHeader}}">
     <Setter Property="MinHeight" Value="44"/><Setter Property="Padding" Value="12,8"/>
-    <Setter Property="Background" Value="#26312B"/><Setter Property="Foreground" Value="#D4DFD7"/>
+    <Setter Property="Background" Value="#212121"/><Setter Property="Foreground" Value="#F1F1F1"/>
     <Setter Property="Template">
      <Setter.Value>
       <ControlTemplate TargetType="DataGridColumnHeader">
        <Grid>
-       <Border x:Name="HeaderBorder" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" BorderBrush="#3A493F" BorderThickness="0,0,1,1">
+       <Border x:Name="HeaderBorder" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}" BorderBrush="#363636" BorderThickness="0,0,1,1">
         <DockPanel>
-         <TextBlock x:Name="Arrow" DockPanel.Dock="Right" Text="▲" Visibility="Collapsed" Margin="6,0,0,0" Foreground="#A4E8B5" FontSize="10" VerticalAlignment="Center"/>
+         <TextBlock x:Name="Arrow" DockPanel.Dock="Right" Text="▲" Visibility="Collapsed" Margin="6,0,0,0" Foreground="#FF6666" FontSize="10" VerticalAlignment="Center"/>
          <ContentPresenter VerticalAlignment="Center"/>
         </DockPanel>
        </Border>
@@ -45,7 +47,7 @@
        <ControlTemplate.Triggers>
         <Trigger Property="SortDirection" Value="Ascending"><Setter TargetName="Arrow" Property="Visibility" Value="Visible"/></Trigger>
         <Trigger Property="SortDirection" Value="Descending"><Setter TargetName="Arrow" Property="Visibility" Value="Visible"/><Setter TargetName="Arrow" Property="Text" Value="▼"/></Trigger>
-        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderBorder" Property="Background" Value="#354A3C"/></Trigger>
+        <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="HeaderBorder" Property="Background" Value="#3B1919"/></Trigger>
        </ControlTemplate.Triggers>
       </ControlTemplate>
      </Setter.Value>

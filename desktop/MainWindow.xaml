@@ -3,23 +3,23 @@
  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
  Title="YouTube Music Downloader" Icon="Assets/app-icon.png" Width="1380" Height="900" MinWidth="1060" MinHeight="720"
- WindowStartupLocation="CenterScreen" Background="#111715" Foreground="#EEF4EF"
+ WindowStartupLocation="CenterScreen" Background="#0F0F0F" Foreground="#F1F1F1"
  Closing="Window_Closing">
- <Grid>
+ <Grid Background="#0F0F0F">
   <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
   <ui:TitleBar Title="YouTube Music Downloader"><ui:TitleBar.Icon><ui:ImageIcon Source="Assets/app-icon.png"/></ui:TitleBar.Icon></ui:TitleBar>
   <Grid Grid.Row="1">
    <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-   <Border Background="#161D1A" BorderBrush="#29342E" BorderThickness="0,0,1,0" Padding="20,26">
+   <Border Background="#0F0F0F" BorderBrush="#282828" BorderThickness="0,0,1,0" Padding="20,26">
     <DockPanel>
      <StackPanel DockPanel.Dock="Bottom">
-      <TextBlock Text="YOUR MUSIC. YOUR ORDER." FontSize="10" Foreground="#A4E8B5" Margin="0,0,0,8"/>
+      <TextBlock Text="YOUR MUSIC. YOUR ORDER." FontSize="10" Foreground="#FF6666" Margin="0,0,0,8"/>
       <TextBlock Text="OPUS audio · UTF-8 M3U8" FontSize="11" Style="{StaticResource Muted}"/>
      </StackPanel>
      <StackPanel>
       <StackPanel Orientation="Horizontal" Margin="0,0,0,28"><Image Source="Assets/app-icon.png" Width="30" Height="30" Margin="0,0,8,0"/><TextBlock Text="music sync" FontSize="20" FontWeight="SemiBold" VerticalAlignment="Center"/></StackPanel>
-      <ui:Button x:Name="PlaylistNav" Content="▤   Playlists" Click="Playlists_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Appearance="Primary" Padding="14,12"/>
-      <ui:Button x:Name="DownloadsNav" Content="↓   Downloads" Click="Downloads_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,12" Margin="0,8,0,0"/>
+      <ui:Button x:Name="PlaylistNav" Content="▤   Playlists" Click="Playlists_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Foreground="White" Appearance="Primary" Padding="14,12"/>
+      <ui:Button x:Name="DownloadsNav" Content="↓   Downloads" Foreground="White" Click="Downloads_Click" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Padding="14,12" Margin="0,8,0,0"/>
       <TextBlock x:Name="DownloadBadge" Text="No active downloads" Margin="12,10,0,0" FontSize="11" TextWrapping="Wrap" Style="{StaticResource Muted}"/>
       <TextBlock Text="01   Connect playlist" Margin="12,28,0,12" Style="{StaticResource Muted}"/>
       <TextBlock Text="02   Review songs" Margin="12,0,0,12" Style="{StaticResource Muted}"/>
@@ -35,7 +35,7 @@
     </Grid.RowDefinitions>
     <DockPanel Margin="0,0,0,12">
      <ui:Button x:Name="SetupButton" DockPanel.Dock="Right" Content="Hide setup · expand list" Click="Setup_Click"/>
-     <TextBlock x:Name="PageLabel" Text="PLAYLIST WORKSPACE" FontSize="12" Foreground="#A4E8B5" VerticalAlignment="Center"/>
+     <TextBlock x:Name="PageLabel" Text="PLAYLIST WORKSPACE" FontSize="12" Foreground="#FF6666" VerticalAlignment="Center"/>
     </DockPanel>
     <Border x:Name="SetupPanel" Grid.Row="1" Style="{StaticResource Panel}" Margin="0,0,0,12">
      <Grid x:Name="Inputs">
@@ -43,7 +43,7 @@
       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
       <TextBlock Text="YouTube Music playlist or song URL" Margin="0,0,0,8"/>
       <ui:TextBox x:Name="UrlInput" Grid.Row="1" PlaceholderText="https://music.youtube.com/playlist?list=…" Margin="0,0,12,12"/>
-      <ui:Button x:Name="ScanButton" Grid.Row="1" Grid.Column="1" Content="Scan playlist" Appearance="Primary" Click="Scan_Click" Margin="0,0,0,12" MinWidth="130"/>
+      <ui:Button x:Name="ScanButton" Grid.Row="1" Grid.Column="1" Content="Scan playlist" Foreground="White" Appearance="Primary" Click="Scan_Click" Margin="0,0,0,12" MinWidth="130"/>
       <Grid Grid.Row="2" Grid.ColumnSpan="2">
        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
        <ui:TextBox x:Name="FolderInput" IsReadOnly="True" PlaceholderText="Choose a music folder or an existing playlist folder" Margin="0,0,12,0"/>
@@ -64,7 +64,7 @@
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
      <StackPanel><TextBlock x:Name="PlaylistTitle" Text="Your song library" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
       <TextBlock x:Name="Counts" Text="Scan a playlist to see its songs here." Style="{StaticResource Muted}" Margin="0,5,0,0"/></StackPanel>
-     <Border Grid.Column="1" Background="#24382C" CornerRadius="14" Padding="14,7" VerticalAlignment="Center"><TextBlock Text="↕  Display sorting only" Foreground="#A4E8B5" FontSize="12"/></Border>
+     <Border Grid.Column="1" Background="#331111" CornerRadius="14" Padding="14,7" VerticalAlignment="Center"><TextBlock Text="↕  Display sorting only" Foreground="#FF6666" FontSize="12"/></Border>
     </Grid>
     <Grid Grid.Row="3" Margin="0,0,0,12">
      <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -76,19 +76,19 @@
      <ui:Button x:Name="ClearSelectionButton" Grid.Column="3" Content="Clear" Click="Clear_Click" Margin="0,0,8,0" ToolTip="Clear the selection for every scanned song"/>
      <ui:Button Grid.Column="4" Content="YouTube order" Click="ResetSort_Click"/>
     </Grid>
-    <Border Grid.Row="4" BorderBrush="#303A37" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
+    <Border Grid.Row="4" BorderBrush="#303030" BorderThickness="1" CornerRadius="8" ClipToBounds="True">
      <Grid>
       <ui:DataGrid x:Name="SongGrid" AutoGenerateColumns="False" CanUserAddRows="False" CanUserDeleteRows="False"
        CanUserReorderColumns="True" CanUserSortColumns="True" CanUserResizeColumns="True" SelectionMode="Extended" RowHeight="42"
-       HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#28312D"
+       HeadersVisibility="Column" GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#2B2B2B"
        ScrollViewer.HorizontalScrollBarVisibility="Auto" ScrollViewer.VerticalScrollBarVisibility="Auto"
-       Background="#171E1B" BorderThickness="0" Sorting="Grid_Sorting" EnableRowVirtualization="True" EnableColumnVirtualization="True">
-       <DataGrid.RowStyle><Style TargetType="DataGridRow"><Setter Property="Background" Value="#171E1B"/><Setter Property="Foreground" Value="#EEF4EF"/>
-        <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#24342A"/></Trigger></Style.Triggers>
+       Background="#181818" BorderThickness="0" Sorting="Grid_Sorting" EnableRowVirtualization="True" EnableColumnVirtualization="True">
+       <DataGrid.RowStyle><Style TargetType="DataGridRow"><Setter Property="Background" Value="#181818"/><Setter Property="Foreground" Value="#F1F1F1"/>
+        <Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="#301919"/></Trigger></Style.Triggers>
        </Style></DataGrid.RowStyle>
        <DataGrid.Columns>
         <DataGridTemplateColumn Header="✓" Width="44" MinWidth="44" CanUserSort="False">
-         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Download this song"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
+         <DataGridTemplateColumn.CellTemplate><DataTemplate><CheckBox Foreground="White" IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEnabled="{Binding Tag, RelativeSource={RelativeSource AncestorType=Window}}" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Download this song"/></DataTemplate></DataGridTemplateColumn.CellTemplate>
         </DataGridTemplateColumn>
         <DataGridTextColumn Header="Position" Binding="{Binding Position}" SortMemberPath="Position" Width="88" MinWidth="88" IsReadOnly="True"/>
         <DataGridTextColumn Header="Title" Binding="{Binding Title}" ElementStyle="{StaticResource SongText}" SortMemberPath="Title" Width="2*" MinWidth="180" IsReadOnly="True"/>
@@ -101,7 +101,7 @@
        </DataGrid.Columns>
       </ui:DataGrid>
       <StackPanel x:Name="EmptyState" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False" Margin="0,44,0,0">
-       <TextBlock Text="♫" FontSize="24" Foreground="#A4E8B5" HorizontalAlignment="Center"/>
+       <TextBlock Text="♫" FontSize="24" Foreground="#FF6666" HorizontalAlignment="Center"/>
        <TextBlock x:Name="EmptyTitle" Text="Your next listening session starts here" FontSize="16" Margin="0,8,0,4"/>
        <TextBlock x:Name="EmptyHint" Text="Add a playlist URL and choose a folder to begin." FontSize="12" Style="{StaticResource Muted}" HorizontalAlignment="Center"/>
       </StackPanel>
@@ -112,11 +112,11 @@
      <StackPanel VerticalAlignment="Center"><TextBlock x:Name="SelectionText" Text="0 songs selected" FontWeight="SemiBold"/>
       <TextBlock x:Name="SelectionHint" Text="Existing audio stays in the M3U8. Missing unchecked songs are skipped." FontSize="11" TextWrapping="Wrap" Style="{StaticResource Muted}" Margin="0,4,0,0"/></StackPanel>
      <ui:Button x:Name="RetryButton" Grid.Column="1" Content="Retry failed" Click="Retry_Click" Margin="12,0,8,0" IsEnabled="False"/>
-     <ui:Button x:Name="DownloadButton" Grid.Column="2" Content="Download selected &amp; sync" Appearance="Primary" Click="Download_Click" IsEnabled="False" Padding="20,12"/>
+     <ui:Button x:Name="DownloadButton" Grid.Column="2" Content="Download selected &amp; sync" Foreground="White" Appearance="Primary" Click="Download_Click" IsEnabled="False" Padding="20,12"/>
      <ui:Button x:Name="BackToPlaylistButton" Grid.Column="2" Content="Back to playlist" Click="Playlists_Click" Visibility="Collapsed" Padding="20,12"/>
     </Grid>
     <StackPanel Grid.Row="6">
-     <ProgressBar x:Name="Progress" Height="4" Minimum="0" Maximum="100" Margin="0,0,0,8"/>
+     <ProgressBar x:Name="Progress" Height="4" Minimum="0" Maximum="100" Foreground="{DynamicResource AccentBrush}" Margin="0,0,0,8"/>
      <TextBlock x:Name="StatusText" Text="Ready. Playlist files always follow YouTube order." TextWrapping="Wrap" Style="{StaticResource Muted}" FontSize="12"/>
      <Expander x:Name="ActivityPanel" Header="Activity" Margin="0,6,0,0" Visibility="Collapsed"><TextBox x:Name="Activity" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" MaxHeight="100"/></Expander>
     </StackPanel>
