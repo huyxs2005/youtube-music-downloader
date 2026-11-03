@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from threading import Lock
-from typing import Any
+from typing import Any, Callable
 from urllib.parse import parse_qs, urlparse
 
 from ytmusicapi import YTMusic
@@ -102,6 +102,8 @@ class Track:
     album: str | None
     thumbnail_url: str | None
     filename: str
+    duration_seconds: float | None = None
+    genre: str | None = None
 
 
 @dataclass
@@ -377,6 +379,8 @@ def track_from_ytmusic(raw_track: dict[str, Any], index: int) -> Track | None:
             raw_track.get("thumbnails") or raw_track.get("thumbnail") or []
         ),
         filename=build_filename(artists, title, video_id),
+        duration_seconds=raw_track.get("duration_seconds"),
+        genre=raw_track.get("genre"),
     )
 
 
@@ -704,6 +708,8 @@ def manifest_entry(track: Track, manually_added: bool = False) -> dict[str, Any]
         "thumbnail_url": track.thumbnail_url,
         "playlist_index": track.index,
         "output_filename": track.filename,
+        "duration_seconds": track.duration_seconds,
+        "genre": track.genre,
     }
     if manually_added:
         entry["manually_added"] = True
@@ -729,6 +735,8 @@ def track_from_manifest_entry(entry: dict[str, Any]) -> Track | None:
             str(entry["thumbnail_url"]) if entry.get("thumbnail_url") else None
         ),
         filename=filename,
+        duration_seconds=entry.get("duration_seconds"),
+        genre=entry.get("genre"),
     )
 
 
@@ -966,8 +974,13 @@ def sync_playlist(
     stop_after_video_id: str | None = None,
     max_workers: int | None = None,
     output_is_parent: bool = False,
+    selected_video_ids: set[str] | None = None,
+    prepared_playlist: tuple[str, str, int, list[Track], list[int]] | None = None,
+    on_track: Callable[[Track, str], None] | None = None,
 ) -> int:
-    playlist_id, playlist_title, total_items, tracks, skipped_items = fetch_playlist_tracks(playlist_url)
+    playlist_id, playlist_title, total_items, tracks, skipped_items = (
+        prepared_playlist if prepared_playlist is not None else fetch_playlist_tracks(playlist_url)
+    )
     safe_playlist_title = sanitize_filename_part(playlist_title, "downloads")
 
     if output_dir is None:
@@ -981,6 +994,8 @@ def sync_playlist(
     output_dir.mkdir(parents=True, exist_ok=True)
     manifest_path = output_dir / MANIFEST_NAME
     manifest = load_manifest(manifest_path)
+    if manifest.get("playlist_id") not in (None, playlist_id):
+        raise ValueError("This folder belongs to a different playlist. Choose its parent folder instead.")
     tracks = prepend_manual_tracks(manifest, tracks)
     manual_track_count = sum(
         1 for item in manifest.get("tracks", []) if item.get("manually_added")
@@ -1032,9 +1047,17 @@ def sync_playlist(
             if final_path.is_file():
                 print(f"Skipping: {track.filename}")
                 skipped_count += 1
+                if on_track:
+                    on_track(track, "Downloaded")
+            elif selected_video_ids is not None and track.video_id not in selected_video_ids:
+                print(f"Not selected: {track.filename}")
+                if on_track:
+                    on_track(track, "Not selected")
             else:
                 print(f"Queueing download: {track.index:03d} - {artists_to_text(track.artists)} - {track.title}")
                 pending_downloads.append(track)
+                if on_track:
+                    on_track(track, "Queued")
 
             if track not in pending_downloads:
                 save_manifest(
@@ -1058,9 +1081,14 @@ def sync_playlist(
         worker_count = max(1, min(selected_max_workers, len(pending_downloads)))
         print("")
         print(f"Downloading {len(pending_downloads)} queued tracks with {worker_count} workers...")
+        def tracked_download(track: Track):
+            if on_track:
+                on_track(track, "Downloading")
+            return download_track_job(track, output_dir, options)
+
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             future_to_track = {
-                executor.submit(download_track_job, track, output_dir, options): track
+                executor.submit(tracked_download, track): track
                 for track in pending_downloads
             }
             for future in as_completed(future_to_track):
@@ -1070,6 +1098,8 @@ def sync_playlist(
                     failed_count += 1
                     failed_tracks.append(track)
                     print(f"Failed: {track.index:03d} - {track.title} ({track.video_id})")
+                    if on_track:
+                        on_track(track, "Failed")
                     continue
 
                 print(f"Downloaded: {track.filename}")
@@ -1091,6 +1121,8 @@ def sync_playlist(
                 )
                 downloaded_count += 1
                 success_count += 1
+                if on_track:
+                    on_track(track, "Downloaded")
 
     write_download_errors(output_dir, failed_tracks)
     failed_downloads_path = output_dir / FAILED_DOWNLOADS_NAME
