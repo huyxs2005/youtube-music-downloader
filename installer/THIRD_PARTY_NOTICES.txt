@@ -1,10 +1,10 @@
-YouTube Music Downloader v1.0 includes third-party software.
+YouTube Music Downloader includes third-party software.
 
 Python
 https://www.python.org/
 Python Software Foundation License
 
-FFmpeg 8.1.1 (Gyan.dev Windows build)
+FFmpeg (Gyan.dev Windows build; tools/ffmpeg.exe -version identifies the bundled version)
 https://ffmpeg.org/
 https://www.gyan.dev/ffmpeg/builds/
 The bundled build is distributed under GPL-compatible terms. Its LICENSE and README are included in the tools folder. Corresponding FFmpeg source is available from https://ffmpeg.org/releases/ and build information is available from the Gyan.dev URL above.

@@ -2,60 +2,37 @@ A Windows desktop app that downloads YouTube Music songs as OPUS audio and keeps
 
 ## Installation
 
-These steps install the **WPF-UI desktop app** on 64-bit Windows. Paste the commands into **Command Prompt (CMD)**.
+### 1. Download the Windows app
 
-### 1. Install the required programs
+**[Download YouTube Music Downloader v2.0.0 for Windows x64](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.0.0/YouTubeMusicDownloader-Desktop-v2.0.0-win-x64.zip)**
 
-| Download | Why you need it |
-| --- | --- |
-| [Git](https://git-scm.com/downloads/win) | Downloads this project and gets updates. |
-| [Python 3.13, 64-bit](https://www.python.org/downloads/windows/) | Runs the download engine. |
-| [.NET 10 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/10.0) | Builds the interface. Install the **SDK**, not only the runtime. |
-| [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) | Processes audio. You need both `ffmpeg.exe` and `ffprobe.exe`. |
+You can also open the [Releases page](https://github.com/huyxs2005/youtube-music-downloader/releases/latest) and download **YouTubeMusicDownloader-Desktop-v2.0.0-win-x64.zip** from **Assets**.
 
-You can install all four through CMD. Paste these commands one at a time and follow the prompts:
+Choose the desktop ZIP, not the automatically generated **Source code** downloads.
 
-```cmd
-winget install --id Git.Git --exact --source winget
-winget install --id Python.Python.3.13 --exact --source winget
-winget install --id Microsoft.DotNet.SDK.10 --exact --source winget
-winget install --id Gyan.FFmpeg --exact --source winget
-```
+The package includes the app, .NET runtime, Python download engine, FFmpeg, and FFprobe. **You do not need to install Python, .NET, Git, or FFmpeg separately. No CMD commands or BAT files are needed to open the app.**
 
-Skip programs you already have. **Close CMD and open a new CMD window after installation.** Check the installations:
+This package is for 64-bit Windows. The older v1.0 installer is the command-line edition; v2.0.0 is the WPF-UI desktop edition.
 
-```cmd
-git --version
-python --version
-dotnet --list-sdks
-ffmpeg -version
-ffprobe -version
-```
+### 2. Extract and open it
 
-Each command should show version information. The SDK list must include a `10.x` version.
+1. Right-click the downloaded ZIP and choose **Extract All**.
+2. Extract it to a normal writable location, such as a folder inside **Documents**.
+3. Open the extracted **YouTubeMusicDownloader-Desktop** folder.
+4. Double-click **YouTubeMusicDownloader.Desktop.exe**.
 
-If `winget` is unavailable, install or update **App Installer** from the Microsoft Store, or use the download links above. For manual installation, enable **Add python.exe to PATH** in Python's installer and add FFmpeg's `bin` folder to your Windows `PATH`.
+**Keep the whole extracted folder together.** Do not move only the EXE, delete its supporting files, or run it from inside the ZIP. You can create a desktop shortcut to the EXE instead.
 
-### 2. Download the project
+The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/youtube-music-downloader/releases/download/v2.0.0/YouTubeMusicDownloader-Desktop-v2.0.0-win-x64.zip.sha256) is provided with the release.
 
-Paste into CMD:
+### 3. Add your cookies.txt file
 
-```cmd
-cd /d "%USERPROFILE%"
-git clone https://github.com/huyxs2005/youtube-music-downloader.git
-cd youtube-music-downloader
-```
-
-This creates a `youtube-music-downloader` folder inside your Windows user folder. Keep CMD open in that project folder for the next steps. If you already cloned the project, open CMD in your existing project folder instead of cloning again.
-
-### 3. Get cookies.txt
-
-**The desktop app requires an exported YouTube cookie file before downloading.**
+**The app requires an exported YouTube cookie file before downloading.**
 
 1. Install [Get cookies.txt LOCALLY](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc) in a compatible browser.
 2. Open [YouTube Music](https://music.youtube.com/) or [YouTube](https://www.youtube.com/) and sign in.
-3. While on that website, export cookies in **Netscape cookies.txt format** using the extension.
-4. Save the file as `cookies.txt` in the project folder, beside `README.md` and `ytmusic_downloader.py`.
+3. While on that website, use the extension to export cookies in **Netscape cookies.txt format**.
+4. Save the file as `cookies.txt` beside **YouTubeMusicDownloader.Desktop.exe**.
 
 The file should begin with:
 
@@ -63,41 +40,27 @@ The file should begin with:
 # Netscape HTTP Cookie File
 ```
 
-The app automatically detects an existing `cookies.txt` beside the app, in the project folder, or in the selected music/playlist folder. You do not need to browse for it again. **Add cookies.txt** lets you choose a file elsewhere, and a valid manually chosen path is remembered. **Verify** checks it again without opening a file picker.
+The app automatically detects an existing `cookies.txt` beside the EXE or in the selected music/playlist folder. You do not need to browse for it again. **Add cookies.txt** lets you choose a file elsewhere, and a valid manually chosen path is remembered. **Verify** checks it again without opening a file picker.
 
-Validation checks the format, YouTube domains, and expiry. These are local checks; YouTube can still reject a signed-out or revoked session. Export a fresh file if that happens.
+Validation checks the format, YouTube domains, and expiry. These local checks cannot prove that YouTube still accepts a signed-out or revoked session. Export fresh cookies if YouTube rejects them.
 
 **Keep cookies.txt private. It contains browser session data. Never share it, upload it to GitHub, or include it in a release.**
 
-### 4. Build and open the app
+### 4. Scan and download
 
-In CMD, while inside the project folder, paste:
+1. On **Playlists**, paste a YouTube Music or YouTube playlist URL.
+2. Click **Choose folder** and select a music parent folder, such as `D:\Music`, or the playlist's existing downloaded folder.
+3. Click **Scan playlist**.
+4. Tick the songs you want to download, or click **Select all**.
+5. Click **Download selected & sync**.
 
-```cmd
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Start Desktop.ps1"
-```
+The **Downloads** tab opens automatically so you can follow the current playlist's progress.
 
-This runs the included setup script. It creates a private Python environment, installs the Python packages, builds the interface, and opens the app. The first run may take a few minutes. You do not need Visual Studio.
+### Optional: Docker for downloads that need a PO token
 
-### 5. Open the app next time
+Some YouTube downloads need an additional token and may fail with HTTP 403 without it. The app supports a local Docker service that provides this token. Try downloading first; complete this section if needed.
 
-In File Explorer, open this folder inside the project:
-
-```text
-desktop\bin\Release\net10.0-windows
-```
-
-Double-click **YouTubeMusicDownloader.Desktop.exe**. You can create a desktop shortcut to it.
-
-**No BAT file or open CMD window is needed for normal use.** Keep the project folder and its `.venv` folder together, because this source build uses them.
-
-The older v1.0 installer in [Releases](https://github.com/huyxs2005/youtube-music-downloader/releases) installs the command-line edition. Use the steps above for the WPF-UI desktop app.
-
-### 6. Optional: Docker and the PO-token provider
-
-Some YouTube downloads need an additional token and may fail with HTTP 403 without it. The app supports a local Docker service that provides this token. You can try downloading first and return here if needed.
-
-If WSL 2 is missing, open **CMD as administrator** and run:
+If WSL 2 is missing, open **Command Prompt (CMD) as administrator** and paste:
 
 ```cmd
 wsl --install --no-distribution
@@ -108,7 +71,7 @@ Restart Windows if requested. See Microsoft's [WSL installation guide](https://l
 
 Install [Docker Desktop for Windows](https://docs.docker.com/desktop/setup/install/windows-install/), choose the **WSL 2 backend**, and open Docker Desktop. Wait for its engine to start.
 
-In a new CMD window, paste:
+In a new CMD window, paste these commands one at a time:
 
 ```cmd
 docker info
@@ -117,7 +80,7 @@ docker run -d --name bgutil-provider -p 127.0.0.1:4416:4416 brainicism/bgutil-yt
 curl http://127.0.0.1:4416/ping
 ```
 
-Create the container only once. If `bgutil-provider` already exists, start it instead:
+Create the container only once. If CMD says `bgutil-provider` already exists, start it instead:
 
 ```cmd
 docker start bgutil-provider
@@ -125,21 +88,19 @@ docker start bgutil-provider
 
 Once configured, the app can open Docker Desktop and start the existing provider when preparing downloads.
 
-## Use the app
+## Using the app
 
-### Download or update a playlist
+### Larger song list and Downloads tab
 
-1. On **Playlists**, paste a playlist URL and click **Choose folder**.
-2. Choose your music parent folder, such as `D:\Music`, or the playlist's existing downloaded folder.
-3. Check that the cookies row shows a valid file, then click **Scan playlist**.
-4. Tick the songs you want to download, or click **Select all**.
-5. Click **Download selected & sync**.
+After scanning, setup collapses so the song table has more room. **Playlist setup** reopens it; **Hide setup · expand list** closes it again.
 
-After scanning, setup collapses so the song list has more room. **Playlist setup** reopens it; **Hide setup · expand list** closes it again.
+The **Downloads** tab shows the current queue, remaining count, and downloaded/failed totals. Use its status filter to focus on **Downloading**, **Queued**, or **Failed** songs. You can browse, scroll, and sort while downloads run. Song selection is locked until the sync finishes.
 
-The **Downloads** tab on the left shows the current playlist's download queue and progress. It opens automatically when you start downloading. You can switch between tabs while downloads run. Song selection is locked during a sync, but browsing, scrolling, and display sorting remain available. Use the status filter to focus on **Downloading**, **Queued**, or **Failed** songs.
+### Updating a playlist
 
-For a new playlist, the app creates a subfolder using its title. Later syncs find the same playlist by its saved YouTube ID, even if the title changes. Existing audio is reused and filenames stay the same. **Retry failed** retries failed songs.
+For a new playlist, the app creates a subfolder using its title. Later syncs find the same playlist by its saved YouTube ID, even if the title changes. Existing audio is reused and filenames stay the same. **Retry failed** selects and retries failed songs.
+
+Keep the audio, M3U8, and `playlist_manifest.json` together in the original playlist folder so the app can recognize existing songs.
 
 ### What do the checkboxes change?
 
@@ -149,11 +110,9 @@ Example: a playlist has 10 songs. The last 7 are already downloaded, and you sel
 
 Unchecked songs that are missing locally are not downloaded and get no broken entries. A sync with nothing selected still refreshes the M3U8 using existing audio.
 
-Keep the audio, M3U8, and `playlist_manifest.json` together in the original playlist folder so the app can recognize existing songs.
+### Sorting and search
 
-### Sort and find songs
-
-Click a header once for ascending **▲** order and again for descending **▼** order:
+Click a column header once for ascending **▲** order and again for descending **▼** order:
 
 | Column | Ascending | Descending |
 | --- | --- | --- |
@@ -166,7 +125,7 @@ Duration, position, and size sort numerically. Unknown values stay at the bottom
 
 **Table sorting never changes the saved playlist order.** Click **YouTube order** to restore the table's original order.
 
-Search by title, artist, album, or genre. Checkboxes stay attached to their songs as rows move. **Select all** and **Clear** apply to every scanned song, including songs hidden by filters. Scroll the table horizontally to reach more columns in a narrow window.
+Search by title, artist, album, or genre. Checkboxes stay attached to songs as rows move. **Select all** and **Clear** apply to every scanned song, including songs hidden by filters. Scroll the table horizontally to reach more columns in a narrow window.
 
 ### Open an existing M3U8
 
@@ -196,50 +155,74 @@ My Playlist\
 
 To update a phone, copy the new audio into its existing playlist folder and replace the old M3U8. Keep the M3U8 beside the audio. In Poweramp, open it under **Library > Playlists** and turn shuffle off for playlist order.
 
-## Update the app
+## Update to a newer release
 
-Close the app first. If you followed the installation path above, paste into CMD:
+1. Let any download finish, then close the app.
+2. Download the new desktop ZIP from [Releases](https://github.com/huyxs2005/youtube-music-downloader/releases/latest).
+3. Extract it into a new folder.
+4. Copy your private `cookies.txt` beside the new EXE, or reuse your remembered cookie-file location.
+5. Open the new EXE and choose your existing music folder when scanning.
 
-```cmd
-cd /d "%USERPROFILE%\youtube-music-downloader"
-git pull --ff-only
-powershell -NoProfile -ExecutionPolicy Bypass -File ".\Start Desktop.ps1"
-```
-
-If installed elsewhere, change the first line to your project folder. Keep your cookies and downloaded music.
+Keep your existing music folders and manifests. You do not need to clone the repository, install development tools, or redownload existing songs.
 
 ## Troubleshooting
 
 | Problem | What to do |
 | --- | --- |
-| A command is not recognized | Reopen CMD after installation. Check the program's installation and `PATH`. |
-| No SDK is found | Install the **.NET 10 SDK** and check `dotnet --list-sdks`. A runtime alone cannot build the app. |
+| The app will not open or reports missing DLL files | Use **Extract All** on the complete ZIP. Keep the EXE and all supporting folders together. |
 | Download button is disabled | Scan a playlist and check the cookies message. Add or refresh the cookie file if needed. |
 | Cookies are rejected | Export a fresh Netscape-format file while signed in on YouTube. Check that its name is `cookies.txt`, not `cookies.txt.txt`. |
-| HTTP 403 or token errors | Set up the optional Docker provider, open Docker Desktop, and run `docker start bgutil-provider`. |
+| HTTP 403 or token errors | Set up the optional Docker provider above, open Docker Desktop, and run `docker start bgutil-provider`. |
 | HTTP 429 | Wait before retrying. YouTube is limiting requests. |
 | Container name already exists | Use `docker start bgutil-provider` instead of creating it again. |
 | Docker is unavailable | Open Docker Desktop, wait for its engine, and check `docker info`. |
 | Existing songs appear missing | Choose the original playlist folder and keep its audio and manifest together. |
-| Building an update says files are in use | Close the app and test previews, then retry. |
+| Files cannot be written | Extract the app and choose a music folder in a writable location outside `Program Files`. |
 
-## Build a portable package
+To check the ZIP's checksum, open CMD in the folder containing your download and run:
 
-For maintainers: complete the source installation, close the app, and run this from the project folder in CMD:
+```cmd
+certutil -hashfile YouTubeMusicDownloader-Desktop-v2.0.0-win-x64.zip SHA256
+```
+
+Compare the result with the release's `.sha256` file.
+
+## For developers: build from source
+
+Normal users can use the portable release above. To develop the app, install Git, Python 3.13, the .NET 10 SDK, and FFmpeg/FFprobe. These commands can be pasted into CMD:
+
+```cmd
+winget install --id Git.Git --exact --source winget
+winget install --id Python.Python.3.13 --exact --source winget
+winget install --id Microsoft.DotNet.SDK.10 --exact --source winget
+winget install --id Gyan.FFmpeg --exact --source winget
+```
+
+Close CMD and open a new window after installation, then run:
+
+```cmd
+cd /d "%USERPROFILE%"
+git clone https://github.com/huyxs2005/youtube-music-downloader.git
+cd youtube-music-downloader
+powershell -NoProfile -ExecutionPolicy Bypass -File ".\Start Desktop.ps1"
+```
+
+The interface uses **C#/WPF and [WPF-UI](https://github.com/lepoco/wpfui)**. The Python engine handles downloading, metadata, manifests, and M3U8 generation. The old BAT launcher remains available for command-line use.
+
+### Build the portable ZIP
+
+Close the source-build app and run these commands from the project folder in CMD:
 
 ```cmd
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\installer\build-desktop.ps1" -Python ".\.venv\Scripts\python.exe"
+.venv\Scripts\python.exe installer\package-desktop.py dist\YouTubeMusicDownloader-Desktop --version 2.0.0
 ```
 
-FFmpeg and FFprobe must be on `PATH`. Alternatively, add `-FfmpegDirectory "C:\ffmpeg\bin"`, replacing that path with your actual FFmpeg folder.
+FFmpeg and FFprobe must be on `PATH`. Alternatively, add `-FfmpegDirectory "C:\ffmpeg\bin"` to the build command, using your actual FFmpeg folder. The ZIP and checksum are written to `dist\releases`. Packaging refuses cookie files and downloaded music.
 
-The output is `dist\YouTubeMusicDownloader-Desktop`. Distribute **the entire folder**, not just the EXE. It contains the .NET runtime, Python engine, FFmpeg, and FFprobe, so users of the complete package do not need to install Python or .NET separately. They need their own cookies and, when required, the optional token provider.
+The older `build-installer.ps1` builds the legacy command-line installer.
 
-Never include private cookies or downloaded music in the package. The older `build-installer.ps1` builds the legacy command-line installer.
-
-## Development and testing
-
-The interface uses **C#/WPF and [WPF-UI](https://github.com/lepoco/wpfui)**. The Python engine handles downloads, metadata, manifests, and M3U8 generation. The old `Download Playlist.bat` remains available for command-line use.
+### Tests
 
 Run from the project folder in CMD:
 
@@ -250,7 +233,7 @@ start "" /wait "tests\desktop\bin\Release\net10.0-windows\DesktopChecks.exe" "%C
 type desktop-checks.txt
 ```
 
-The desktop checks use local fixtures without downloading from YouTube or using private cookies. For UI changes, also use the app and inspect screenshots at default and minimum window sizes, including large playlists. Check both tabs, sorting, checkboxes, search with no matches, filters, cookie controls, picker cancellation, and scrolling.
+The desktop checks use local fixtures without downloading from YouTube or using private cookies. For UI changes, also use the app and inspect screenshots at default and minimum sizes, including large playlists. Check both tabs, sorting, checkboxes, empty search results, filters, cookie controls, picker cancellation, and scrolling.
 
 ## Responsible use
 

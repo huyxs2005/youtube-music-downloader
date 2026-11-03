@@ -2,11 +2,12 @@
 param(
     [string]$Dotnet = "dotnet",
     [string]$Python = "python",
-    [string]$FfmpegDirectory = ""
+    [string]$FfmpegDirectory = "",
+    [string]$OutputDirectory = ""
 )
 $ErrorActionPreference = "Stop"
 $ProjectRoot = Split-Path -Parent $PSScriptRoot
-$Package = Join-Path $ProjectRoot "dist\YouTubeMusicDownloader-Desktop"
+$Package = if ($OutputDirectory) { [IO.Path]::GetFullPath($OutputDirectory) } else { Join-Path $ProjectRoot "dist\YouTubeMusicDownloader-Desktop" }
 $EngineDist = Join-Path $ProjectRoot "build\desktop-engine-dist"
 
 & $Python -m pip install -r (Join-Path $ProjectRoot "requirements-build.txt")
