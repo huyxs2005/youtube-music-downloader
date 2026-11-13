@@ -1,7 +1,7 @@
 #define MyAppName "YouTube Music Downloader"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "huyxs2005"
-#define MyAppURL "https://github.com/huyxs2005/ytmusic-signed-in-downloader"
+#define MyAppURL "https://github.com/huyxs2005/ytmusic-cookie-downloader"
 #define MyAppExeName "YouTubeMusicDownloader.exe"
 
 [Setup]
