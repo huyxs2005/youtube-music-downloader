@@ -524,9 +524,11 @@ public partial class MainWindow : Wpf.Ui.Controls.FluentWindow
             await new BackendClient().RunAsync(new { action = "metadata", snapshot = currentSnapshot, cookies = cookiesValid ? CookiesInput.Text : null }, element => {
                 if (cancellation.IsCancellationRequested || element.GetProperty("type").GetString() != "metadata") return;
                 string? id = element.GetProperty("videoId").GetString();
-                foreach (var song in songs.Where(s => s.VideoId == id)) song.ApplyMetadata(element);
-                view?.Refresh(); downloadView?.Refresh();
+                if (id != null && songLookup.TryGetValue(id, out var matching))
+                    foreach (var song in matching) song.ApplyMetadata(element);
             }, _ => { }, cancellation.Token);
+            // Re-sort/filter once: all rows arrive together, and refreshing per row froze the window.
+            if (!cancellation.IsCancellationRequested) { view?.Refresh(); downloadView?.Refresh(); }
         } catch (OperationCanceledException) { }
         catch (Exception) {
             if (!cancellation.IsCancellationRequested)

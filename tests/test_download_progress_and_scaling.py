@@ -98,6 +98,27 @@ class DownloadProgressAndScalingTests(unittest.TestCase):
             self.assertEqual(pacing, {"song-2": False, "song-3": True, "song-5": True})
             self.assertTrue(options.paced, "The caller's options must not be changed")
 
+    def test_tags_are_written_inside_the_download_worker_before_the_file_is_moved(self):
+        import threading
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            tracks = [engine.Track(i, f"song-{i}", None, f"Song {i}", ["Artist"], None, None, f"song-{i}.opus") for i in (1, 2)]
+            main_thread, tagged = threading.get_ident(), []
+            def download(track, output, options):
+                path = output / (track.video_id + ".temp.opus")
+                path.write_bytes(b"fixture audio")
+                return track, path, None
+            def tag(path, track):
+                tagged.append((path.name, threading.get_ident() != main_thread, path.is_file()))
+                return True
+            with contextlib.redirect_stdout(io.StringIO()), patch.object(engine, "download_track_job", side_effect=download), \
+                 patch.object(engine, "apply_track_metadata", side_effect=tag):
+                result = engine.sync_playlist("https://music.youtube.com/playlist?list=PL-tag", folder, engine.DownloadOptions(),
+                    selected_video_ids={"song-1", "song-2"}, prepared_playlist=("PL-tag", "Tag", 2, tracks, []))
+            self.assertEqual(result, 0)
+            self.assertEqual(sorted(tagged), [("song-1.temp.opus", True, True), ("song-2.temp.opus", True, True)])
+            self.assertTrue((folder / "song-1.opus").is_file() and (folder / "song-2.opus").is_file())
+
     def test_error_messages_remove_credentials_and_signed_query_parameters(self):
         result=engine.safe_error_message("HTTP 403 https://user:password@example.com/audio?secret=token\nCookie: private-cookie\nAuthorization: private-header")
         for secret in ("password","secret=token","private-cookie","private-header"):
@@ -107,3 +128,10 @@ class DownloadProgressAndScalingTests(unittest.TestCase):
     def test_bundled_quickjs_is_enabled_explicitly(self):
         with patch.object(engine.shutil,"which",side_effect=lambda name: "C:/app/tools/qjs.exe" if name=="qjs" else None):
             self.assertEqual(engine.javascript_runtimes(),{"quickjs":{"path":"C:/app/tools/qjs.exe"}})
+
+    def test_installed_deno_and_node_are_offered_alongside_bundled_quickjs(self):
+        paths = {"qjs": "C:/app/tools/qjs.exe", "deno": "C:/deno/deno.exe", "node": "C:/node/node.exe"}
+        with patch.object(engine.shutil, "which", side_effect=paths.get):
+            # yt-dlp ranks deno > node > quickjs itself and skips missing or too-old runtimes.
+            self.assertEqual(engine.javascript_runtimes(), {"deno": {"path": paths["deno"]}, "node": {"path": paths["node"]},
+                                                            "quickjs": {"path": paths["qjs"]}})

@@ -28,7 +28,7 @@ from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
-APP_VERSION = "2.2.6"
+APP_VERSION = "2.2.7"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
 DOWNLOAD_ERRORS_NAME = "download_errors.log"
@@ -116,12 +116,17 @@ class DownloadOptions:
 
 
 def javascript_runtimes() -> dict[str, dict[str, str]]:
-    """Enable a bundled lightweight runtime, or a supported installed alternative."""
-    for executable, name in (("qjs", "quickjs"), ("deno", "deno"), ("node", "node")):
+    """Offer every available runtime; yt-dlp picks the best supported one (deno > node > quickjs).
+
+    An installed Deno or Node solves YouTube's challenges about twice as fast as the bundled
+    QuickJS, which stays as the fallback on PCs without them (or with versions too old for yt-dlp).
+    """
+    runtimes = {}
+    for executable, name in (("deno", "deno"), ("node", "node"), ("qjs", "quickjs")):
         path = shutil.which(executable)
         if path:
-            return {name: {"path": path}}
-    return {}
+            runtimes[name] = {"path": path}
+    return runtimes
 
 
 def safe_error_message(error: BaseException | str) -> str:
@@ -1185,7 +1190,10 @@ def sync_playlist(
             if on_track:
                 on_track(track, "Downloading")
             # The first song starts at once; the rest keep the anti-hammering pacing.
-            return download_track_job(track, output_dir, unpaced_options if track.video_id == first_video_id else options)
+            track, temp_output, exc = download_track_job(track, output_dir, unpaced_options if track.video_id == first_video_id else options)
+            # Tag (and fetch cover art) here, in parallel, so a slow image server cannot hold up other songs.
+            tagged = exc is None and apply_track_metadata(temp_output, track)
+            return track, temp_output, exc, tagged
 
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             future_to_track = {
@@ -1193,7 +1201,7 @@ def sync_playlist(
                 for track in pending_downloads
             }
             for future in as_completed(future_to_track):
-                track, temp_output, exc = future.result()
+                track, temp_output, exc, tagged = future.result()
                 final_path = output_dir / track.filename
                 if exc:
                     failed_count += 1
@@ -1205,7 +1213,7 @@ def sync_playlist(
 
                 print(f"Downloaded: {track.filename}")
                 ensure_final_path(temp_output, final_path)
-                if apply_track_metadata(final_path, track):
+                if tagged:
                     print(f"Updated metadata: {track.filename}")
                     metadata_count += 1
                 downloaded_entry = known_tracks.get(track.video_id, {})
