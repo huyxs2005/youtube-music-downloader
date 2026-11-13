@@ -1,15 +1,15 @@
 # YouTube Music Downloader
 
-A Windows app that downloads YouTube Music playlists to OPUS audio **while signed in as you**, so songs that make other downloaders fail still come through.
+A Windows app that downloads YouTube Music playlists to OPUS audio **using your own YouTube cookies**, so songs that make other downloaders fail still come through.
 
 ## Why this exists
 
-Most downloaders fetch songs anonymously, the way a logged-out browser would. That works for ordinary videos but breaks on a lot of real music libraries. This app downloads with your own exported YouTube cookies, plus an optional local token service in Docker, so YouTube treats each request like your signed-in account playing the song.
+Most downloaders fetch songs anonymously, the way a logged-out browser would. That works for ordinary videos but breaks on a lot of real music libraries. This app downloads with your own exported YouTube cookies, plus an optional local token service in Docker, so YouTube treats each request like your own account playing the song in your browser. The app never asks for your password.
 
 | Problem | Typical downloader | This app |
 |---|---|---|
-| Songs that exist only on YouTube Music | Fails or finds the wrong video | ✓ Downloads the YouTube Music track itself, signed in |
-| "Sign in to confirm you're not a bot" | Fails | ✓ Uses your signed-in session |
+| Songs that exist only on YouTube Music | Fails or finds the wrong video | ✓ Downloads the YouTube Music track itself, with your cookies |
+| "Sign in to confirm you're not a bot" | Fails | ✓ Uses your browser session from the cookies file |
 | Age-restricted songs | Fails | ✓ Your account's age check applies |
 | HTTP 403 errors partway through | Fails | ✓ Fixed by the Docker token service (see [Docker](#optional-docker-for-downloads-that-need-a-po-token)) |
 | Songs blocked in your country | Fails | ✗ Also unavailable. YouTube decides region from your internet connection, not your account |
@@ -28,11 +28,11 @@ It does not get around paywalls or country blocks: it can only download what you
 
 ### 1. Download the Windows app
 
-**[Download YouTube Music Downloader v2.2.7 — Extract & open folder](https://github.com/huyxs2005/ytmusic-signed-in-downloader/releases/download/v2.2.7/YouTubeMusicDownloader-Desktop-v2.2.7-win-x64-extract.exe)**
+**[Download YouTube Music Downloader v2.2.7 — Extract & open folder](https://github.com/huyxs2005/ytmusic-cookie-downloader/releases/download/v2.2.7/YouTubeMusicDownloader-Desktop-v2.2.7-win-x64-extract.exe)**
 
-Prefer a regular archive? Download the **[portable ZIP](https://github.com/huyxs2005/ytmusic-signed-in-downloader/releases/download/v2.2.7/YouTubeMusicDownloader-Desktop-v2.2.7-win-x64.zip)** instead. Both downloads contain the same app.
+Prefer a regular archive? Download the **[portable ZIP](https://github.com/huyxs2005/ytmusic-cookie-downloader/releases/download/v2.2.7/YouTubeMusicDownloader-Desktop-v2.2.7-win-x64.zip)** instead. Both downloads contain the same app.
 
-Choose a Windows app download from [Releases](https://github.com/huyxs2005/ytmusic-signed-in-downloader/releases/latest), not the automatically generated **Source code** downloads.
+Choose a Windows app download from [Releases](https://github.com/huyxs2005/ytmusic-cookie-downloader/releases/latest), not the automatically generated **Source code** downloads.
 
 The package includes the app, .NET runtime, Python download engine, FFmpeg, and FFprobe. **You do not need to install Python, .NET, Git, or FFmpeg separately. No CMD commands or BAT files are needed to open the app.**
 
@@ -61,7 +61,7 @@ YouTubeMusicDownloader-Desktop/
 
 Keep the `app` subfolder beside the EXE. The root EXE is a small launcher using the .NET Framework included with supported Windows versions. The app's own runtime, download engine, tools, licenses, and this guide stay inside `app`. Your private `cookies.txt` can stay beside the launcher.
 
-The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/ytmusic-signed-in-downloader/releases/download/v2.2.7/YouTubeMusicDownloader-Desktop-v2.2.7-win-x64.zip.sha256) is provided with the release.
+The app is unsigned, so Windows may show an unknown-publisher warning. Download it from this repository's official release page. A [SHA-256 checksum](https://github.com/huyxs2005/ytmusic-cookie-downloader/releases/download/v2.2.7/YouTubeMusicDownloader-Desktop-v2.2.7-win-x64.zip.sha256) is provided with the release.
 
 ### 3. Add your cookies.txt file
 
@@ -220,7 +220,7 @@ To update a phone, copy the new audio into its existing playlist folder and repl
 ## Update to a newer release
 
 1. Let any download finish, then close the app.
-2. Download the new desktop ZIP from [Releases](https://github.com/huyxs2005/ytmusic-signed-in-downloader/releases/latest).
+2. Download the new desktop ZIP from [Releases](https://github.com/huyxs2005/ytmusic-cookie-downloader/releases/latest).
 3. Extract it into a new folder.
 4. Copy your private `cookies.txt` beside the new EXE, or reuse your remembered cookie-file location.
 5. Open the new EXE and choose your existing music folder when scanning.
@@ -265,8 +265,8 @@ Close CMD and open a new window after installation, then run:
 
 ```cmd
 cd /d "%USERPROFILE%"
-git clone https://github.com/huyxs2005/ytmusic-signed-in-downloader.git
-cd ytmusic-signed-in-downloader
+git clone https://github.com/huyxs2005/ytmusic-cookie-downloader.git
+cd ytmusic-cookie-downloader
 powershell -NoProfile -ExecutionPolicy Bypass -File ".\Start Desktop.ps1"
 ```
 
