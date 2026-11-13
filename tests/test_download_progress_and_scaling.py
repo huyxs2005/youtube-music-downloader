@@ -55,6 +55,49 @@ class DownloadProgressAndScalingTests(unittest.TestCase):
             self.assertEqual(values,[(25.0,"Downloading"),(100.0,"Processing")])
             downloader.cookiejar.load.assert_called_once_with("fixture-cookies.txt")
 
+    def capture_ytdlp_settings(self, options):
+        captured = []
+        def factory(settings):
+            captured.append(settings)
+            context = MagicMock()
+            def download(urls):
+                (Path(settings["outtmpl"].replace(".%(ext)s", ".opus"))).write_bytes(b"fixture")
+            context.__enter__.return_value.download.side_effect = download
+            return context
+        with tempfile.TemporaryDirectory() as temporary, patch.object(engine, "initialize_yt_dlp_plugins"), \
+             patch.object(engine, "YoutubeDL", side_effect=factory):
+            folder = Path(temporary)
+            engine.download_track(engine.Track(1, "id", None, "Song", ["Artist"], None, None, "song.opus"), folder, options)
+        return captured[0]
+
+    def test_paced_download_keeps_waits_and_unpaced_download_skips_them(self):
+        paced = self.capture_ytdlp_settings(engine.DownloadOptions())
+        self.assertEqual(paced["sleep_interval_requests"], engine.YT_DLP_SLEEP_REQUESTS_SECONDS)
+        self.assertEqual(paced["sleep_interval"], engine.YT_DLP_SLEEP_INTERVAL_SECONDS)
+        self.assertEqual(paced["max_sleep_interval"], engine.YT_DLP_MAX_SLEEP_INTERVAL_SECONDS)
+        unpaced = self.capture_ytdlp_settings(engine.DownloadOptions(paced=False))
+        for key in ("sleep_interval_requests", "sleep_interval", "max_sleep_interval"):
+            self.assertNotIn(key, unpaced)
+
+    def test_only_the_first_queued_song_starts_without_waiting(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            tracks = [engine.Track(i, f"song-{i}", None, f"Song {i}", ["Artist"], None, None, f"song-{i}.opus") for i in range(1, 6)]
+            (folder / "song-1.opus").write_bytes(b"already here")
+            pacing = {}
+            def download(track, output, options):
+                pacing[track.video_id] = options.paced
+                path = output / (track.video_id + ".temp.opus")
+                path.write_bytes(b"fixture audio")
+                return track, path, None
+            options = engine.DownloadOptions()
+            with contextlib.redirect_stdout(io.StringIO()), patch.object(engine, "download_track_job", side_effect=download), \
+                 patch.object(engine, "apply_track_metadata", return_value=False):
+                engine.sync_playlist("https://music.youtube.com/playlist?list=PL-pace", folder, options,
+                    selected_video_ids={"song-1", "song-2", "song-3", "song-5"}, prepared_playlist=("PL-pace", "Pace", 5, tracks, []))
+            self.assertEqual(pacing, {"song-2": False, "song-3": True, "song-5": True})
+            self.assertTrue(options.paced, "The caller's options must not be changed")
+
     def test_error_messages_remove_credentials_and_signed_query_parameters(self):
         result=engine.safe_error_message("HTTP 403 https://user:password@example.com/audio?secret=token\nCookie: private-cookie\nAuthorization: private-header")
         for secret in ("password","secret=token","private-cookie","private-header"):
