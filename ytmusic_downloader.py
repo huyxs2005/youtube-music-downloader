@@ -15,7 +15,7 @@ import subprocess
 import time
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from threading import Lock
 from typing import Any, Callable
@@ -28,14 +28,14 @@ from yt_dlp.utils import DownloadError
 
 
 MANIFEST_NAME = "playlist_manifest.json"
-APP_VERSION = "2.2.5"
+APP_VERSION = "2.2.6"
 DEFAULT_COOKIES_NAME = "cookies.txt"
 FAILED_DOWNLOADS_NAME = "failed_downloads.txt"
 DOWNLOAD_ERRORS_NAME = "download_errors.log"
 USER_CANCELLED_EXIT_CODE = 20
-YT_DLP_SLEEP_REQUESTS_SECONDS = 5
+YT_DLP_SLEEP_REQUESTS_SECONDS = 3
 YT_DLP_SLEEP_INTERVAL_SECONDS = 10
-YT_DLP_MAX_SLEEP_INTERVAL_SECONDS = 30
+YT_DLP_MAX_SLEEP_INTERVAL_SECONDS = 25
 YT_DLP_RETRIES = 3
 YT_DLP_FRAGMENT_RETRIES = 3
 EMBEDDED_THUMBNAIL_SIZE = 1008
@@ -111,6 +111,8 @@ class DownloadOptions:
     cookies_file: str | None = None
     on_progress: Callable[[Track, float | None, str], None] | None = None
     on_error: Callable[[Track, str], None] | None = None
+    # False only for the first song of a download: it starts at once, later songs keep the pacing.
+    paced: bool = True
 
 
 def javascript_runtimes() -> dict[str, dict[str, str]]:
@@ -554,9 +556,6 @@ def run_yt_dlp_download(
         "logger": QuietYtdlpLogger(),
         "js_runtimes": javascript_runtimes(),
         "progress_hooks": [report_transfer],
-        "sleep_interval_requests": YT_DLP_SLEEP_REQUESTS_SECONDS,
-        "sleep_interval": YT_DLP_SLEEP_INTERVAL_SECONDS,
-        "max_sleep_interval": YT_DLP_MAX_SLEEP_INTERVAL_SECONDS,
         "retries": YT_DLP_RETRIES,
         "fragment_retries": YT_DLP_FRAGMENT_RETRIES,
         "remote_components": ["ejs:github"],
@@ -568,6 +567,13 @@ def run_yt_dlp_download(
             }
         ],
     }
+    if options.paced:
+        # Space out requests so a long download does not hammer YouTube with the user's account.
+        ydl_opts.update(
+            sleep_interval_requests=YT_DLP_SLEEP_REQUESTS_SECONDS,
+            sleep_interval=YT_DLP_SLEEP_INTERVAL_SECONDS,
+            max_sleep_interval=YT_DLP_MAX_SLEEP_INTERVAL_SECONDS,
+        )
     url = f"https://music.youtube.com/watch?v={track.video_id}"
     with YoutubeDL(ydl_opts) as ydl:
         if options.cookies_file:
@@ -990,7 +996,8 @@ def sync_single_track(
     else:
         print(f"Downloading single song: {artists_to_text(track.artists)} - {track.title}")
         try:
-            temp_output = download_track(track, output_dir, options)
+            # A single added song is the only song in this download, so it starts at once.
+            temp_output = download_track(track, output_dir, replace(options, paced=False))
             ensure_final_path(temp_output, final_path)
             print(f"Downloaded: {track.filename}")
             if apply_track_metadata(final_path, track):
@@ -1172,10 +1179,13 @@ def sync_playlist(
         worker_count = max(1, min(selected_max_workers, len(pending_downloads)))
         print("")
         print(f"Downloading {len(pending_downloads)} queued tracks with {worker_count} workers...")
+        first_video_id = pending_downloads[0].video_id
+        unpaced_options = replace(options, paced=False)
         def tracked_download(track: Track):
             if on_track:
                 on_track(track, "Downloading")
-            return download_track_job(track, output_dir, options)
+            # The first song starts at once; the rest keep the anti-hammering pacing.
+            return download_track_job(track, output_dir, unpaced_options if track.video_id == first_video_id else options)
 
         with ThreadPoolExecutor(max_workers=worker_count) as executor:
             future_to_track = {
