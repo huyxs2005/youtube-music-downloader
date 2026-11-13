@@ -77,6 +77,25 @@ class FilenameMigrationTests(unittest.TestCase):
         names.assign_filenames([song], self.folder, {}, ["A & B - Song.opus", "A+B - Song.opus"], migrate=True)
         self.assertEqual(song.filename, "A, B - Song.opus")
 
+    def test_old_file_already_in_folder_is_reused_when_artist_separator_differs(self):
+        song = track("id", "Daydreaming", "Chevy, City Girl")
+        known = {"id": {"output_filename": "Chevy, City Girl - Daydreaming.opus"}}
+        old = "Chevy & City Girl - Daydreaming.opus"
+        (self.folder / old).write_bytes(b"phone copy")
+        names.assign_filenames([song], self.folder, known)
+        self.assertEqual(song.filename, old)
+        names.assign_filenames([song], self.folder, known, migrate=True)
+        self.assertEqual(song.filename, old)
+        self.assertEqual((self.folder / old).read_bytes(), b"phone copy")
+
+    def test_folder_file_owned_by_another_track_is_not_taken(self):
+        owner, other = track("one", "Song", "A, B"), track("two", "Song", "A & B")
+        known = {"one": {"output_filename": "A, B - Song.opus"}}
+        (self.folder / "A, B - Song.opus").write_bytes(b"owner audio")
+        names.assign_filenames([owner, other], self.folder, known)
+        self.assertEqual(owner.filename, "A, B - Song.opus")
+        self.assertNotEqual(other.filename, "A, B - Song.opus")
+
     def test_legacy_import_rejects_paths_and_comments(self):
         playlist = self.folder / "old.m3u8"
         playlist.write_text("#EXTM3U\nArtist - Song.opus\n../escape.opus\nD:\\other.opus\n", encoding="utf-8")
