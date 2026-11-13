@@ -53,6 +53,14 @@ def assign_filenames(tracks, folder, known, legacy_names=(), migrate=False):
         name = engine.safe_manifest_filename(entry.get("output_filename"), ".opus")
         if name and without_id(name, video_id) == name:
             reserved[name_key(name)] = video_id
+    # Audio copied into the folder by hand (e.g. from a phone) may use an older artist
+    # separator such as "A & B" instead of "A, B". Offer unowned files as fuzzy candidates.
+    if folder.is_dir():
+        for path in folder.iterdir():
+            name = path.name
+            if (path.is_file() and engine.safe_manifest_filename(name, ".opus")
+                    and name_key(name) not in reserved and match_key(name)):
+                normalized[match_key(name)].add(name)
     assigned, renamed, backup = {}, [], None
     for track in tracks:
         if track.video_id in assigned:
